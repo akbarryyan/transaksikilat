@@ -1,121 +1,126 @@
-# Move Docker Build Off VPS — Design
+# Memindahkan Docker Build Keluar dari VPS — Desain
 
-## Problem
+## Masalah
 
-Deploys currently happen by SSH-ing into the VPS, `git pull`-ing, and running
-`docker build` / `docker compose up --build` directly on the VPS. Running
-`next build` on the VPS consumes enough CPU/RAM to crash the instance. The
-Dockerfile and docker-compose.yml only ever existed on the VPS
-(`/var/www/transaksikilat`), not in this git repo.
+Deploy saat ini dilakukan dengan SSH ke VPS, `git pull`, lalu menjalankan
+`docker build` / `docker compose up --build` langsung di VPS. Menjalankan
+`next build` di VPS menghabiskan CPU/RAM sampai bikin instance-nya crash.
+Dockerfile dan docker-compose.yml selama ini cuma ada di VPS
+(`/var/www/transaksikilat`), tidak pernah masuk ke repo git ini.
 
-## Goal
+## Tujuan
 
-The VPS should only ever run:
+VPS seharusnya hanya menjalankan:
 
 ```
 docker compose pull
 docker compose up -d
 ```
 
-All image building happens off the VPS, in GitHub Actions, publishing to
-GitHub Container Registry (GHCR).
+Semua proses build image dipindahkan keluar dari VPS, dilakukan di GitHub
+Actions, lalu hasilnya di-publish ke GitHub Container Registry (GHCR).
 
-## Non-goals
+## Bukan tujuan (out of scope)
 
-- No changes to the database (it's external/managed; the compose file has no
-  DB service, and this change never touches migrations or data).
-- No BullMQ worker service — it's not deployed to production yet, out of
-  scope here.
-- No multi-stage/`output: standalone` Dockerfile rewrite. Chosen approach
-  keeps the existing single-stage Dockerfile behavior identical, to minimize
-  risk. Multi-stage optimization is a possible future improvement, not part
-  of this change.
-- No automatic SSH deploy from CI. The user pulls and restarts manually on
-  the VPS after each CI build completes.
+- Tidak ada perubahan pada database (bersifat eksternal/managed; compose
+  file tidak punya service DB, dan perubahan ini sama sekali tidak
+  menyentuh migration atau data).
+- Tidak ada service worker BullMQ — belum di-deploy ke production, jadi di
+  luar scope perubahan ini.
+- Tidak ada penulisan ulang Dockerfile jadi multi-stage/`output: standalone`.
+  Pendekatan yang dipilih mempertahankan perilaku Dockerfile single-stage
+  yang sekarang persis sama, demi meminimalkan risiko. Optimasi multi-stage
+  bisa jadi perbaikan lanjutan di masa depan, bukan bagian dari perubahan
+  ini.
+- Tidak ada auto-deploy via SSH dari CI. User yang menjalankan pull dan
+  restart secara manual di VPS setiap kali build CI selesai.
 
-## Design
+## Desain
 
-### 1. Dockerfile (moved into git repo, minimal change)
+### 1. Dockerfile (dipindahkan ke repo git, perubahan minimal)
 
-Keep the existing single-stage structure (`npm ci` → `prisma generate` →
-`npm run build` → `npm run start`). Add build `ARG`/`ENV` for the four
-`NEXT_PUBLIC_*` variables the app reads at build time:
+Struktur single-stage yang sudah ada dipertahankan (`npm ci` → `prisma
+generate` → `npm run build` → `npm run start`). Ditambahkan `ARG`/`ENV`
+untuk build empat variabel `NEXT_PUBLIC_*` yang dibaca aplikasi saat build:
 
 - `NEXT_PUBLIC_APP_URL`
 - `NEXT_PUBLIC_AUTH_OTP_ENABLED`
 - `NEXT_PUBLIC_BASE_URL`
 - `NEXT_PUBLIC_REQUIRE_LOGIN_TO_PURCHASE`
 
-These are needed because Next.js inlines `NEXT_PUBLIC_*` values into the
-client bundle at `next build` time. Previously this worked by accident: the
-VPS built directly inside `/var/www/transaksikilat`, so `COPY . .` picked up
-the real `.env` file sitting next to the Dockerfile. Once the build happens
-in CI (checking out git, where `.env*` is gitignored), those values must be
-passed explicitly as Docker build args.
+Ini diperlukan karena Next.js meng-inline nilai `NEXT_PUBLIC_*` ke dalam
+client bundle saat `next build`. Sebelumnya ini jalan secara kebetulan: VPS
+build langsung di dalam `/var/www/transaksikilat`, jadi `COPY . .` ikut
+mengambil file `.env` asli yang ada di sebelah Dockerfile. Begitu build
+pindah ke CI (checkout dari git, di mana `.env*` di-gitignore), nilai-nilai
+tersebut harus dikirim eksplisit sebagai Docker build args.
 
-### 2. `.dockerignore` (new)
+### 2. `.dockerignore` (baru)
 
-Excludes `node_modules`, `.git`, `.env*`, `.next` from the build context.
-Belt-and-suspenders alongside `.env*` being gitignored — ensures secrets can
-never end up baked into an image layer even if someone runs a local build
-from a dirty working directory.
+Mengecualikan `node_modules`, `.git`, `.env*`, `.next` dari build context.
+Sebagai lapisan pengaman tambahan selain `.env*` yang sudah di-gitignore —
+memastikan secret tidak akan pernah ikut ter-bake ke dalam image layer,
+bahkan kalau ada yang menjalankan build lokal dari working directory yang
+kotor.
 
-### 3. GitHub Actions workflow — `.github/workflows/build-and-push.yml` (new)
+### 3. GitHub Actions workflow — `.github/workflows/build-and-push.yml` (baru)
 
-- Trigger: push to `main`.
-- `docker/login-action` to `ghcr.io` using the built-in `GITHUB_TOKEN`
-  (`packages: write` permission) — no manual PAT needed for CI.
-- `docker/build-push-action` builds and pushes:
-  - Tags: `ghcr.io/akbarryyan/transaksikilat:latest` and
-    `ghcr.io/akbarryyan/transaksikilat:<git-sha>` (sha tag enables rollback).
-  - Build args: the four `NEXT_PUBLIC_*` values, sourced from GitHub
-    **repository variables** (not secrets — they're public-facing values
-    anyway).
-  - GitHub Actions cache (`type=gha`) to speed up repeated builds.
-  - Default platform `linux/amd64` (matches the VPS architecture).
+- Trigger: push ke `main`.
+- `docker/login-action` ke `ghcr.io` menggunakan `GITHUB_TOKEN` bawaan
+  (permission `packages: write`) — tidak perlu PAT manual untuk CI.
+- `docker/build-push-action` build lalu push:
+  - Tag: `ghcr.io/akbarryyan/transaksikilat:latest` dan
+    `ghcr.io/akbarryyan/transaksikilat:<git-sha>` (tag sha memungkinkan
+    rollback).
+  - Build args: empat nilai `NEXT_PUBLIC_*`, diambil dari GitHub
+    **repository variables** (bukan secrets — karena memang nilainya
+    bersifat public-facing).
+  - GitHub Actions cache (`type=gha`) untuk mempercepat build berikutnya.
+  - Platform default `linux/amd64` (sesuai arsitektur VPS).
 
-### 4. `docker-compose.yml` (moved into git repo for reference)
+### 4. `docker-compose.yml` (dipindahkan ke repo git sebagai referensi)
 
-Identical to current VPS version except `build:` is replaced with:
+Identik dengan versi VPS sekarang, kecuali `build:` diganti jadi:
 
 ```yaml
 image: ghcr.io/akbarryyan/transaksikilat:latest
 ```
 
-Everything else (`container_name`, `restart`, `network_mode: host`,
-`env_file: .env`, the `public/uploads` volume) stays unchanged. The VPS
-keeps its own copy of this file at `/var/www/transaksikilat/docker-compose.yml`
-and is updated manually (not auto-synced from CI).
+Bagian lainnya (`container_name`, `restart`, `network_mode: host`,
+`env_file: .env`, volume `public/uploads`) tetap tidak berubah. VPS tetap
+menyimpan salinannya sendiri di
+`/var/www/transaksikilat/docker-compose.yml` dan diupdate manual (tidak
+di-sync otomatis dari CI).
 
-### 5. One-time VPS setup
+### 5. Setup satu kali di VPS
 
-Because the image contains full application source (single-stage Dockerfile,
-`COPY . .`), the GHCR package is kept **private**, not public. This also
-means the VPS needs to authenticate once:
+Karena image berisi source code aplikasi secara lengkap (Dockerfile
+single-stage, `COPY . .`), package GHCR dibuat **private**, bukan public.
+Konsekuensinya, VPS perlu autentikasi sekali:
 
-1. Create a GitHub Personal Access Token (classic) with `read:packages`
-   scope only.
-2. On the VPS: `echo "<PAT>" | docker login ghcr.io -u akbarryyan --password-stdin`
-   — credentials persist in `~/.docker/config.json`, no need to repeat per
-   deploy.
+1. Buat GitHub Personal Access Token (classic) dengan scope `read:packages`
+   saja.
+2. Di VPS: `echo "<PAT>" | docker login ghcr.io -u akbarryyan --password-stdin`
+   — kredensial tersimpan permanen di `~/.docker/config.json`, tidak perlu
+   diulang setiap deploy.
 
-Also requires setting the 4 `NEXT_PUBLIC_*` values as GitHub **repository
-variables** (Settings → Secrets and variables → Actions → Variables) so the
-CI workflow can read them.
+Juga perlu set 4 nilai `NEXT_PUBLIC_*` sebagai GitHub **repository
+variables** (Settings → Secrets and variables → Actions → Variables) supaya
+workflow CI bisa membacanya.
 
-## Resulting deploy flow
+## Alur deploy setelahnya
 
-1. Push/merge to `main`.
-2. GitHub Actions builds the image on GitHub's runners (ample RAM, doesn't
-   touch the VPS) and pushes it to GHCR.
-3. On the VPS: `docker compose pull && docker compose up -d`. No build step
-   ever runs on the VPS.
-4. Rollback: point the VPS compose file's tag at a previous `<git-sha>` tag,
-   then `docker compose pull && docker compose up -d` again.
+1. Push/merge ke `main`.
+2. GitHub Actions build image di runner GitHub (RAM cukup, tidak menyentuh
+   VPS sama sekali) lalu push ke GHCR.
+3. Di VPS: `docker compose pull && docker compose up -d`. Tidak ada proses
+   build yang pernah jalan di VPS.
+4. Rollback: arahkan tag di compose file VPS ke `<git-sha>` versi
+   sebelumnya, lalu `docker compose pull && docker compose up -d` lagi.
 
-## Files touched
+## File yang terpengaruh
 
-- `Dockerfile` (new in repo, adjusted from VPS's copy)
-- `.dockerignore` (new)
-- `docker-compose.yml` (new in repo, reference copy)
-- `.github/workflows/build-and-push.yml` (new)
+- `Dockerfile` (baru di repo, hasil penyesuaian dari salinan di VPS)
+- `.dockerignore` (baru)
+- `docker-compose.yml` (baru di repo, sebagai salinan referensi)
+- `.github/workflows/build-and-push.yml` (baru)
