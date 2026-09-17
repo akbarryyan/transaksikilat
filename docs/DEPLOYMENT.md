@@ -1,0 +1,101 @@
+# Deployment
+
+VPS **tidak pernah** menjalankan `docker build` lagi. Image dibangun di luar VPS (idealnya lewat GitHub Actions, sementara ini manual dari laptop karena akun GitHub masih locked), lalu di-push ke GitHub Container Registry (GHCR). VPS hanya `docker compose pull` + `docker compose up -d`.
+
+Latar belakang & desain lengkap: [`superpowers/specs/2026-09-17-move-docker-build-off-vps-design.md`](superpowers/specs/2026-09-17-move-docker-build-off-vps-design.md)
+
+## Arsitektur singkat
+
+```
+laptop / GitHub Actions  --build & push-->  ghcr.io/akbarryyan/transaksikilat
+                                                        |
+                                                        v
+VPS (/var/www/transaksikilat)  --docker compose pull & up-d-->  container jalan
+```
+
+Registry: `ghcr.io/akbarryyan/transaksikilat` (private).
+
+## Status saat ini: build manual dari laptop
+
+Akun GitHub sedang **locked karena masalah billing**, jadi workflow `.github/workflows/build-and-push.yml` belum bisa jalan otomatis (job langsung gagal sebelum dapat runner). Selama ini belum beres, build dilakukan manual dari laptop yang punya akses internet penuh — **bukan** dari VPS, dan **bukan** dari environment yang dibatasi jaringan (mis. sandbox tanpa akses ke `dl-cdn.alpinelinux.org`).
+
+### Build & push dari laptop
+
+```bash
+cd ~/Kerjaan/repository/transaksikilat
+git pull origin main
+
+docker build \
+  --build-arg NEXT_PUBLIC_APP_URL="https://transaksikilat.com" \
+  --build-arg NEXT_PUBLIC_AUTH_OTP_ENABLED="false" \
+  --build-arg NEXT_PUBLIC_BASE_URL="https://transaksikilat.com" \
+  --build-arg NEXT_PUBLIC_REQUIRE_LOGIN_TO_PURCHASE="true" \
+  -t ghcr.io/akbarryyan/transaksikilat:latest .
+
+docker push ghcr.io/akbarryyan/transaksikilat:latest
+```
+
+Login GHCR di laptop (sekali saja per mesin, token butuh scope `write:packages`):
+
+```bash
+echo "<PAT_WRITE_PACKAGES>" | docker login ghcr.io -u akbarryyan --password-stdin
+```
+
+### Deploy ke VPS
+
+```bash
+ssh <user>@<vps-host>
+cd /var/www/transaksikilat
+docker compose pull
+docker compose up -d
+docker inspect transaksikilat-app --format '{{.Config.Image}}'   # harus ghcr.io/akbarryyan/transaksikilat:latest
+```
+
+Login GHCR di VPS (sekali saja, token cukup scope `read:packages`):
+
+```bash
+echo "<PAT_READ_PACKAGES>" | docker login ghcr.io -u akbarryyan --password-stdin
+```
+
+Lalu smoke test: buka domain production, cek halaman utama, login, dan minimal satu alur transaksi.
+
+## Setelah akun GitHub tidak locked lagi
+
+Cukup:
+
+```bash
+git push origin main
+```
+
+GitHub Actions otomatis build & push image ke GHCR (lihat tab **Actions** di repo untuk memantau). Langkah build/push manual dari laptop di atas tidak diperlukan lagi. Bagian **Deploy ke VPS** tetap sama — masih manual (`docker compose pull && docker compose up -d`), karena workflow ini sengaja tidak auto-SSH ke VPS.
+
+## Variabel build-time (`NEXT_PUBLIC_*`)
+
+Next.js meng-inline nilai `NEXT_PUBLIC_*` ke bundle client saat `next build`, jadi nilainya harus dikirim sebagai build arg — baik manual (`--build-arg`) maupun lewat CI (GitHub repository variables). Kalau salah satu prefix `NEXT_PUBLIC_APP_URL` / `NEXT_PUBLIC_AUTH_OTP_ENABLED` / `NEXT_PUBLIC_BASE_URL` / `NEXT_PUBLIC_REQUIRE_LOGIN_TO_PURCHASE` berubah nilainya, image harus di-build ulang (bukan cukup ganti `.env` di VPS).
+
+Semua variabel lain (`DATABASE_URL`, kredensial SMTP, session secret, dll.) tetap di file `.env` di VPS dan dibaca saat runtime lewat `env_file: .env` di `docker-compose.yml` — tidak pernah masuk ke proses build maupun ke GitHub.
+
+Lokasi setting untuk CI: repo GitHub → Settings → Secrets and variables → Actions → tab **Variables**.
+
+## Rollback
+
+Image di-tag dua kali saat build CI: `latest` dan `<git-sha>`. Untuk rollback ke versi sebelumnya:
+
+1. Cari sha commit versi yang mau dipakai (`git log --oneline`)
+2. Di VPS, edit `docker-compose.yml`, ganti tag image dari `:latest` ke `:<git-sha>`
+3. `docker compose pull && docker compose up -d`
+
+(Build manual dari laptop di atas cuma nge-tag `:latest`, jadi rollback berbasis sha baru berfungsi penuh setelah CI otomatis kembali jalan.)
+
+## Troubleshooting
+
+**`apk add` di dalam `docker build` macet lama / timeout.**
+Container Docker tidak bisa reach mirror paket Alpine (`dl-cdn.alpinelinux.org`), meskipun host bisa akses internet normal. Penyebab paling umum: **VPN aktif** menyebabkan masalah MTU di Docker bridge network (koneksi TCP kebentuk tapi transfer data macet). Matikan VPN sementara saat build, atau build dari mesin/waktu yang tidak sedang connect VPN.
+
+**Muncul banyak `prisma:error ... Environment variable not found: DATABASE_URL` saat `npm run build`.**
+Ini normal dan **tidak membatalkan build** — beberapa halaman mencoba fetch data (mis. site branding) saat proses static generation, dan `DATABASE_URL` memang sengaja tidak di-set saat build. Next.js menangkap error ini dan tetap lanjut. Build dianggap sukses selama di akhir log muncul `Successfully built ...` dan `Successfully tagged ...`.
+
+**GitHub Actions gagal instan (job selesai dalam hitungan detik, 0 steps, tanpa runner).**
+Dua kemungkinan:
+1. Repo Settings → Actions → General → **Workflow permissions** di-set ke "Read repository contents permission" (bukan "Read and write"), sehingga `permissions: packages: write` di workflow ditolak.
+2. Akun GitHub locked karena billing — cek `https://github.com/settings/billing`. Kalau halaman itu terlihat normal tapi GitHub tetap menolak, laporkan ke `https://github.com/support` (issue administratif di sisi GitHub, bukan masalah konfigurasi repo).
