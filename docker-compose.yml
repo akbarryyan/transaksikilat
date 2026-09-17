@@ -1,0 +1,13 @@
+services:
+  transaksikilat-app:
+    image: ghcr.io/akbarryyan/transaksikilat:latest
+    container_name: transaksikilat-app
+    restart: unless-stopped
+    network_mode: host
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      PORT: 3003
+    volumes:
+      - /var/www/transaksikilat/public/uploads:/app/public/uploads
