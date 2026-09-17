@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/src/infra/db/prisma";
+import { requireAdminSession } from "@/lib/admin";
 
 export const dynamic = "force-dynamic";
 
@@ -7,6 +8,11 @@ export const dynamic = "force-dynamic";
  * GET /api/admin/tickets — list all tickets for admin
  */
 export async function GET() {
+  const auth = await requireAdminSession();
+  if ("error" in auth) {
+    return NextResponse.json({ success: false, error: auth.error }, { status: auth.status });
+  }
+
   const tickets = await prisma.ticket.findMany({
     include: {
       user: { select: { id: true, name: true, email: true, phone: true } },

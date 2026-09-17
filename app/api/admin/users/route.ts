@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/src/infra/db/prisma";
+import { requireAdminSession } from "@/lib/admin";
 
 export const dynamic = "force-dynamic";
 
@@ -8,6 +9,11 @@ export const dynamic = "force-dynamic";
  * Daftar user ringkas untuk keperluan admin (test transaksi, dll.)
  */
 export async function GET() {
+  const auth = await requireAdminSession();
+  if ("error" in auth) {
+    return NextResponse.json({ success: false, error: auth.error }, { status: auth.status });
+  }
+
   try {
     const users = await prisma.user.findMany({
       orderBy: [{ role: "asc" }, { createdAt: "asc" }],

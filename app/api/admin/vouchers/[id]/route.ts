@@ -5,6 +5,7 @@
 
 import { NextResponse } from "next/server";
 import { prisma } from "@/src/infra/db/prisma";
+import { requireAdminSession } from "@/lib/admin";
 
 export const dynamic = "force-dynamic";
 
@@ -12,6 +13,11 @@ export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const auth = await requireAdminSession();
+  if ("error" in auth) {
+    return NextResponse.json({ success: false, error: auth.error }, { status: auth.status });
+  }
+
   try {
     const { id } = await params;
     const body = await request.json().catch(() => null);
@@ -57,6 +63,11 @@ export async function DELETE(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const auth = await requireAdminSession();
+  if ("error" in auth) {
+    return NextResponse.json({ success: false, error: auth.error }, { status: auth.status });
+  }
+
   try {
     const { id } = await params;
     await prisma.voucher.delete({ where: { id } });

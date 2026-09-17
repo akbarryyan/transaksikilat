@@ -3,10 +3,16 @@ import {
   getPoppayDebugConfigSummary,
   PoppayClient,
 } from "@/src/infra/payment/poppay/poppay.client";
+import { requireAdminSession } from "@/lib/admin";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
+  const auth = await requireAdminSession();
+  if ("error" in auth) {
+    return NextResponse.json({ success: false, error: auth.error }, { status: auth.status });
+  }
+
   try {
     const summary = await getPoppayDebugConfigSummary();
     const missing: string[] = [];

@@ -5,10 +5,16 @@
 import { NextResponse } from "next/server";
 import nodemailer from "nodemailer";
 import { getSiteConfig, getSiteName } from "@/lib/site-config";
+import { requireAdminSession } from "@/lib/admin";
 
 export const dynamic = "force-dynamic";
 
 export async function POST() {
+  const auth = await requireAdminSession();
+  if ("error" in auth) {
+    return NextResponse.json({ success: false, error: auth.error }, { status: auth.status });
+  }
+
   try {
     const host =
       (await getSiteConfig("SMTP_HOST")) || process.env.SMTP_HOST || "";

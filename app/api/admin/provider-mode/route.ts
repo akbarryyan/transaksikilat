@@ -15,10 +15,16 @@ import {
   initProviderModesFromDB,
 } from "@/src/infra/providers/provider.factory";
 import { ProviderType, ProviderMode } from "@/src/core/domain/enums/provider.enum";
+import { requireAdminSession } from "@/lib/admin";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
+  const auth = await requireAdminSession();
+  if ("error" in auth) {
+    return NextResponse.json({ success: false, error: auth.error }, { status: auth.status });
+  }
+
   // Ensure globalThis is synced from DB on every cold-start
   await initProviderModesFromDB();
 
@@ -48,6 +54,11 @@ const PatchSchema = z.object({
 });
 
 export async function PATCH(request: Request) {
+  const auth = await requireAdminSession();
+  if ("error" in auth) {
+    return NextResponse.json({ success: false, error: auth.error }, { status: auth.status });
+  }
+
   let body: unknown;
   try {
     body = await request.json();

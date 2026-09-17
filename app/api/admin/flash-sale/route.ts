@@ -11,10 +11,16 @@ import {
   setFlashSaleConfig,
   type FlashSaleConfig,
 } from "@/lib/site-config";
+import { requireAdminSession } from "@/lib/admin";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
+  const auth = await requireAdminSession();
+  if ("error" in auth) {
+    return NextResponse.json({ success: false, error: auth.error }, { status: auth.status });
+  }
+
   const config = await getFlashSaleConfig();
   return NextResponse.json({ success: true, data: config });
 }
@@ -37,6 +43,11 @@ const PutSchema = z.object({
 });
 
 export async function PUT(request: Request) {
+  const auth = await requireAdminSession();
+  if ("error" in auth) {
+    return NextResponse.json({ success: false, error: auth.error }, { status: auth.status });
+  }
+
   let body: unknown;
   try {
     body = await request.json();
@@ -57,6 +68,11 @@ export async function PUT(request: Request) {
 }
 
 export async function DELETE() {
+  const auth = await requireAdminSession();
+  if ("error" in auth) {
+    return NextResponse.json({ success: false, error: auth.error }, { status: auth.status });
+  }
+
   const defaultCfg: FlashSaleConfig = {
     isActive: false,
     endTime: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),

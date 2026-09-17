@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { ProviderManagementService } from "@/src/core/services/provider/provider-management.service";
 import { ProviderType } from "@/src/core/domain/enums/provider.enum";
+import { requireAdminSession } from "@/lib/admin";
 
 export const dynamic = "force-dynamic";
 
@@ -15,6 +16,11 @@ export const dynamic = "force-dynamic";
  * }
  */
 export async function POST(request: Request) {
+  const auth = await requireAdminSession();
+  if ("error" in auth) {
+    return NextResponse.json({ success: false, error: auth.error }, { status: auth.status });
+  }
+
   try {
     const body = await request.json();
     const { provider, operations = ["checkBalance", "healthCheck"] } = body;

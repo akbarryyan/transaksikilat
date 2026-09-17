@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ProviderRepository } from "@/src/infra/db/repositories/provider.repository";
+import { requireAdminSession } from "@/lib/admin";
 
 const providerRepo = new ProviderRepository();
 
@@ -8,6 +9,11 @@ const providerRepo = new ProviderRepository();
  * Get all provider settings (margin configuration)
  */
 export async function GET() {
+  const auth = await requireAdminSession();
+  if ("error" in auth) {
+    return NextResponse.json({ success: false, error: auth.error }, { status: auth.status });
+  }
+
   try {
     const settings = await providerRepo.getAllProviderSettings();
 
@@ -46,6 +52,11 @@ export async function GET() {
  * }
  */
 export async function PUT(request: NextRequest) {
+  const auth = await requireAdminSession();
+  if ("error" in auth) {
+    return NextResponse.json({ success: false, error: auth.error }, { status: auth.status });
+  }
+
   try {
     const body = await request.json();
 

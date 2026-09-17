@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/src/infra/db/prisma";
+import { requireAdminSession } from "@/lib/admin";
 
 export const dynamic = "force-dynamic";
 
@@ -12,6 +13,11 @@ const DEFAULT_METHODS = [
  * Returns ALL payment methods (active + inactive), seeding current defaults if empty.
  */
 export async function GET() {
+  const auth = await requireAdminSession();
+  if ("error" in auth) {
+    return NextResponse.json({ success: false, error: auth.error }, { status: auth.status });
+  }
+
   try {
     const count = await prisma.paymentMethod.count();
     if (count === 0) {
@@ -38,6 +44,11 @@ export async function GET() {
  * Body: { key, label, group, imageUrl?, sortOrder? }
  */
 export async function POST(req: NextRequest) {
+  const auth = await requireAdminSession();
+  if ("error" in auth) {
+    return NextResponse.json({ success: false, error: auth.error }, { status: auth.status });
+  }
+
   try {
     const { key, label, group, imageUrl, sortOrder } = await req.json();
     if (!key || !label || !group) {

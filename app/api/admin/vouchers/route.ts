@@ -5,10 +5,16 @@
 
 import { NextResponse } from "next/server";
 import { prisma } from "@/src/infra/db/prisma";
+import { requireAdminSession } from "@/lib/admin";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
+  const auth = await requireAdminSession();
+  if ("error" in auth) {
+    return NextResponse.json({ success: false, error: auth.error }, { status: auth.status });
+  }
+
   try {
     const vouchers = await prisma.voucher.findMany({
       orderBy: { createdAt: "desc" },
@@ -44,6 +50,11 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  const auth = await requireAdminSession();
+  if ("error" in auth) {
+    return NextResponse.json({ success: false, error: auth.error }, { status: auth.status });
+  }
+
   try {
     const body = await request.json().catch(() => null);
     if (!body) return NextResponse.json({ success: false, error: "Invalid JSON" }, { status: 400 });

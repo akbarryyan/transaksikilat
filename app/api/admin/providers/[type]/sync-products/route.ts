@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ProviderManagementService } from "@/src/core/services/provider/provider-management.service";
 import { ProviderType } from "@/src/core/domain/enums/provider.enum";
+import { requireAdminSession } from "@/lib/admin";
 
 const providerService = new ProviderManagementService();
 
@@ -12,6 +13,11 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ type: string }> }
 ) {
+  const auth = await requireAdminSession();
+  if ("error" in auth) {
+    return NextResponse.json({ success: false, error: auth.error }, { status: auth.status });
+  }
+
   try {
     const { type } = await params;
     const provider = type.toUpperCase() as ProviderType;

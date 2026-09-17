@@ -7,10 +7,16 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/src/infra/db/prisma";
 import { imageRefSchema } from "@/lib/upload";
+import { requireAdminSession } from "@/lib/admin";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
+  const auth = await requireAdminSession();
+  if ("error" in auth) {
+    return NextResponse.json({ success: false, error: auth.error }, { status: auth.status });
+  }
+
   try {
     const promos = await prisma.promo.findMany({
       orderBy: [{ sortOrder: "asc" }, { createdAt: "desc" }],
@@ -34,6 +40,11 @@ const CreateSchema = z.object({
 });
 
 export async function POST(request: Request) {
+  const auth = await requireAdminSession();
+  if ("error" in auth) {
+    return NextResponse.json({ success: false, error: auth.error }, { status: auth.status });
+  }
+
   let body: unknown;
   try { body = await request.json(); }
   catch { return NextResponse.json({ success: false, error: "Invalid JSON" }, { status: 400 }); }

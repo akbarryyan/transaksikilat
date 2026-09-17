@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/src/infra/db/prisma";
+import { requireAdminSession } from "@/lib/admin";
 
 export const dynamic = "force-dynamic";
 
@@ -8,6 +9,11 @@ export const dynamic = "force-dynamic";
  * List all distinct brands (from products) merged with their BrandMeta (imageUrl)
  */
 export async function GET() {
+  const auth = await requireAdminSession();
+  if ("error" in auth) {
+    return NextResponse.json({ success: false, error: auth.error }, { status: auth.status });
+  }
+
   try {
     // All distinct brand names from active products
     const productBrands = await prisma.product.findMany({
@@ -49,6 +55,11 @@ export async function GET() {
  * Body: { brand: string, imageUrl?: string }
  */
 export async function PUT(request: NextRequest) {
+  const auth = await requireAdminSession();
+  if ("error" in auth) {
+    return NextResponse.json({ success: false, error: auth.error }, { status: auth.status });
+  }
+
   try {
     const body = await request.json();
     const { brand, imageUrl } = body as { brand: string; imageUrl?: string };
@@ -77,6 +88,11 @@ export async function PUT(request: NextRequest) {
  * InputFieldDef: { key: string, label: string, placeholder: string, required: boolean, width?: string }
  */
 export async function PATCH(request: NextRequest) {
+  const auth = await requireAdminSession();
+  if ("error" in auth) {
+    return NextResponse.json({ success: false, error: auth.error }, { status: auth.status });
+  }
+
   try {
     const body = await request.json();
     const { brand, inputFields } = body as { brand: string; inputFields: object[] | null };
@@ -104,6 +120,11 @@ export async function PATCH(request: NextRequest) {
  * Body: { brand: string }
  */
 export async function DELETE(request: NextRequest) {
+  const auth = await requireAdminSession();
+  if ("error" in auth) {
+    return NextResponse.json({ success: false, error: auth.error }, { status: auth.status });
+  }
+
   try {
     const body = await request.json();
     const { brand } = body as { brand: string };

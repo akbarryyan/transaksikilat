@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { isPoppayConfigured, PoppayClient } from "@/src/infra/payment/poppay/poppay.client";
+import { requireAdminSession } from "@/lib/admin";
 
 export const dynamic = "force-dynamic";
 
@@ -7,6 +8,11 @@ export async function GET(
   _request: Request,
   { params }: { params: Promise<{ uid: string }> }
 ) {
+  const auth = await requireAdminSession();
+  if ("error" in auth) {
+    return NextResponse.json({ success: false, error: auth.error }, { status: auth.status });
+  }
+
   try {
     if (!(await isPoppayConfigured())) {
       return NextResponse.json(
