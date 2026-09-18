@@ -140,8 +140,14 @@ export class ReconcileOrderService {
   }
 
   /** Bulk reconcile all stale orders (called by admin or cron) */
-  async reconcileStaleOrders(): Promise<{ processed: number; errors: number }> {
-    const staleOrders = await this.orderRepo.findPendingProviderOrders(5);
+  async reconcileStaleOrders(opts?: {
+    olderThanMinutes?: number;
+    limit?: number;
+  }): Promise<{ scanned: number; processed: number; errors: number }> {
+    const staleOrders = await this.orderRepo.findPendingProviderOrders(
+      opts?.olderThanMinutes ?? 5,
+      opts?.limit
+    );
 
     let processed = 0;
     let errors = 0;
@@ -156,6 +162,6 @@ export class ReconcileOrderService {
       }
     }
 
-    return { processed, errors };
+    return { scanned: staleOrders.length, processed, errors };
   }
 }

@@ -442,8 +442,12 @@ export class OrderRepository {
 
   // ── Admin & reconcile helpers ────────────────────────────────────────────
 
-  /** Get orders stuck in PROCESSING_PROVIDER or PAID for reconciliation */
-  async findPendingProviderOrders(olderThanMinutes = 5) {
+  /**
+   * Get orders stuck in PROCESSING_PROVIDER or PAID for reconciliation, oldest
+   * first. Bounded because each one costs a call to the provider: an unbounded
+   * sweep over a backlog would time out partway through.
+   */
+  async findPendingProviderOrders(olderThanMinutes = 5, limit = 50) {
     const cutoff = new Date(Date.now() - olderThanMinutes * 60 * 1000);
     return prisma.order.findMany({
       where: {
@@ -451,6 +455,8 @@ export class OrderRepository {
         updatedAt: { lt: cutoff },
       },
       include: { product: true },
+      orderBy: { updatedAt: "asc" },
+      take: limit,
     });
   }
 }

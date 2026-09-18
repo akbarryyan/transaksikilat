@@ -83,6 +83,37 @@ echo "<PAT_READ_PACKAGES>" | docker login ghcr.io -u akbarryyan --password-stdin
 
 Lalu smoke test: buka domain production, cek halaman utama, login, dan minimal satu alur transaksi.
 
+## Cron: rekonsiliasi order menggantung
+
+Order yang macet di `PAID`/`PROCESSING_PROVIDER` dicek ulang ke provider oleh
+`POST /api/cron/reconcile-orders`. Ini perlu dijadwalkan dari luar aplikasi:
+retry yang berjalan di dalam proses memakai timer di memori, dan timer itu
+hilang setiap container dibuat ulang — artinya hilang di setiap deploy.
+
+Satu kali setup di VPS:
+
+1. Isi `CRON_SECRET` di `/var/www/transaksikilat/.env` dengan string acak
+   panjang, lalu `docker compose up -d`. Tanpa secret ini endpointnya menolak
+   semua request.
+
+2. Pasang cron (`crontab -e`), jalan tiap 5 menit:
+
+```cron
+*/5 * * * * curl -fsS -X POST -H "Authorization: Bearer GANTI_DENGAN_CRON_SECRET" http://127.0.0.1:3003/api/cron/reconcile-orders >> /var/log/reconcile-cron.log 2>&1
+```
+
+Satu sapuan memproses paling banyak 25 order, jadi tumpukan diselesaikan
+bertahap lintas beberapa panggilan, bukan sekali jalan sampai timeout.
+
+Cek hasilnya di log aplikasi — baris hanya muncul kalau ada yang dikerjakan:
+
+```bash
+docker compose logs --tail=200 transaksikilat-app | grep "Cron/Reconcile"
+```
+
+Endpoint admin `POST /api/admin/transactions/reconcile-all` tetap ada untuk
+sapuan manual dari panel admin.
+
 ## Gate test
 
 `.github/workflows/build-and-push.yml` punya dua job: `verify` menjalankan
