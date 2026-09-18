@@ -90,9 +90,13 @@ export default function Header() {
         setCharIdx((c) => c - 1);
       }, 30);
     } else if (isDeleting && charIdx === 0) {
-      // Move to next text
-      setIsDeleting(false);
-      setPlaceholderIdx((i) => (i + 1) % PLACEHOLDER_TEXTS.length);
+      // Move to next text. Deferred like every other branch of this machine —
+      // advancing synchronously here makes the effect re-run within the same
+      // commit, costing an extra render pass on each cycle.
+      timeout = setTimeout(() => {
+        setIsDeleting(false);
+        setPlaceholderIdx((i) => (i + 1) % PLACEHOLDER_TEXTS.length);
+      }, 0);
     }
 
     return () => clearTimeout(timeout);

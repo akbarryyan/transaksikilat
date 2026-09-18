@@ -19,14 +19,15 @@ export function useAdminAuth() {
   const router = useRouter();
   const pathname = usePathname();
   const [user, setUser] = useState<AdminUser | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [checked, setChecked] = useState(false);
+
+  // The login page needs no check, so derive the flag instead of writing state
+  // from the effect — a synchronous setState there costs an extra render pass.
+  const isLoginPage = pathname === "/admin/login";
+  const loading = !isLoginPage && !checked;
 
   useEffect(() => {
-    // Skip auth check on the login page itself
-    if (pathname === "/admin/login") {
-      setLoading(false);
-      return;
-    }
+    if (isLoginPage) return;
 
     fetch("/api/admin/auth")
       .then((r) => r.json())
@@ -40,8 +41,8 @@ export function useAdminAuth() {
       .catch(() => {
         router.replace("/admin/login?reason=unauthorized");
       })
-      .finally(() => setLoading(false));
-  }, [pathname, router]);
+      .finally(() => setChecked(true));
+  }, [isLoginPage, router]);
 
   return { user, loading };
 }

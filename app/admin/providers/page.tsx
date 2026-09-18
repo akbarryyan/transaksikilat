@@ -775,7 +775,7 @@ export default function ProvidersPage() {
 
               {filteredProducts.length === 0 && (
                 <div className="py-8 text-center">
-                  <p className="text-sm text-slate-400">Tidak ada produk. Klik 'Sync Layanan' untuk mengambil produk dari provider.</p>
+                  <p className="text-sm text-slate-400">Tidak ada produk. Klik &apos;Sync Layanan&apos; untuk mengambil produk dari provider.</p>
                 </div>
               )}
             </div>

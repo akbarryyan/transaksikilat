@@ -600,7 +600,7 @@ export default function JokiPage() {
                   className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-400 resize-none"
                 />
                 <p className="text-xs text-slate-400 mt-1">
-                  Format: Login | Nickname | Hero | Catatan (pisahkan dengan "|")
+                  Format: Login | Nickname | Hero | Catatan (pisahkan dengan &quot;|&quot;)
                 </p>
               </div>
 

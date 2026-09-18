@@ -30,7 +30,6 @@ export default function PromoPage() {
   const router = useRouter();
 
   const [promos, setPromos] = useState<Promo[]>([]);
-  const [filtered, setFiltered] = useState<Promo[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [heroImageUrl, setHeroImageUrl] = useState(
@@ -43,25 +42,20 @@ export default function PromoPage() {
       .then((d) => {
         if (d.success) {
           setPromos(d.data);
-          setFiltered(d.data);
           if (d.heroImageUrl) setHeroImageUrl(d.heroImageUrl);
         }
       })
       .finally(() => setLoading(false));
   }, []);
 
-  useEffect(() => {
-    const q = search.toLowerCase();
-    setFiltered(
-      q
-        ? promos.filter(
-            (p) =>
-              p.title.toLowerCase().includes(q) ||
-              (p.description ?? "").toLowerCase().includes(q)
-          )
-        : promos
-    );
-  }, [search, promos]);
+  const query = search.toLowerCase();
+  const filtered = query
+    ? promos.filter(
+        (p) =>
+          p.title.toLowerCase().includes(query) ||
+          (p.description ?? "").toLowerCase().includes(query)
+      )
+    : promos;
 
   const handleCardClick = (promo: Promo) => {
     if (promo.linkUrl) {

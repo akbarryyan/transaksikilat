@@ -39,10 +39,6 @@ export default function TicketDetailPage({ params }: { params: Promise<{ id: str
   const [closing, setClosing] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    loadTicket();
-  }, [id]);
-
   function loadTicket() {
     setLoading(true);
     fetch(`/api/tickets/${id}`)
@@ -51,6 +47,11 @@ export default function TicketDetailPage({ params }: { params: Promise<{ id: str
       .catch(() => {})
       .finally(() => setLoading(false));
   }
+
+  useEffect(() => {
+    loadTicket();
+  }, [id]);
+
 
   useEffect(() => {
     if (ticket) bottomRef.current?.scrollIntoView({ behavior: "smooth" });

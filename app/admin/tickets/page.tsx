@@ -30,6 +30,15 @@ export default function AdminTicketsPage() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<string>("ALL");
 
+  // Disimpan di state supaya render tetap murni — memanggil Date.now() langsung
+  // saat render membuat hasilnya berubah tanpa perubahan state, dan labelnya
+  // tidak pernah menyegar. Dengan ini label ikut diperbarui tiap menit.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 60_000);
+    return () => clearInterval(timer);
+  }, []);
+
   useEffect(() => {
     fetch("/api/admin/tickets")
       .then((r) => r.json())
@@ -47,7 +56,7 @@ export default function AdminTicketsPage() {
   };
 
   function timeAgo(dateStr: string) {
-    const diff = Date.now() - new Date(dateStr).getTime();
+    const diff = now - new Date(dateStr).getTime();
     const mins = Math.floor(diff / 60000);
     if (mins < 1) return "baru saja";
     if (mins < 60) return `${mins}m lalu`;

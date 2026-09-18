@@ -34,8 +34,13 @@ export default function TicketsPage() {
   const [message, setMessage] = useState("");
   const [sending, setSending] = useState(false);
 
+  // Disimpan di state supaya render tetap murni — memanggil Date.now() langsung
+  // saat render membuat hasilnya berubah tanpa perubahan state, dan labelnya
+  // tidak pernah menyegar. Dengan ini label ikut diperbarui tiap menit.
+  const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
-    loadTickets();
+    const timer = setInterval(() => setNow(Date.now()), 60_000);
+    return () => clearInterval(timer);
   }, []);
 
   function loadTickets() {
@@ -46,6 +51,11 @@ export default function TicketsPage() {
       .catch(() => {})
       .finally(() => setLoading(false));
   }
+
+  useEffect(() => {
+    loadTickets();
+  }, []);
+
 
   async function createTicket() {
     if (!subject.trim() || !message.trim()) return;
@@ -68,7 +78,7 @@ export default function TicketsPage() {
   }
 
   function timeAgo(dateStr: string) {
-    const diff = Date.now() - new Date(dateStr).getTime();
+    const diff = now - new Date(dateStr).getTime();
     const mins = Math.floor(diff / 60000);
     if (mins < 1) return "baru saja";
     if (mins < 60) return `${mins}m lalu`;

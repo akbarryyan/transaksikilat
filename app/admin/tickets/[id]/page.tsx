@@ -41,8 +41,6 @@ export default function AdminTicketDetailPage({ params }: { params: Promise<{ id
   const bottomRef = useRef<HTMLDivElement>(null);
   const toast = useToast();
 
-  useEffect(() => { loadTicket(); }, [id]);
-
   function loadTicket() {
     setLoading(true);
     fetch(`/api/admin/tickets/${id}`)
@@ -51,6 +49,9 @@ export default function AdminTicketDetailPage({ params }: { params: Promise<{ id
       .catch(() => {})
       .finally(() => setLoading(false));
   }
+
+  useEffect(() => { loadTicket(); }, [id]);
+
 
   useEffect(() => {
     if (ticket) bottomRef.current?.scrollIntoView({ behavior: "smooth" });
