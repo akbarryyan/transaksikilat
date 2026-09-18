@@ -110,15 +110,8 @@ export async function GET() {
     })
   );
 
-  // Normalize to 0–100 for the chart bars; include raw IDR for tooltips
-  const maxVal = Math.max(...monthlyData.map((m) => Math.max(m.walletRaw, m.gatewayRaw)), 1);
-  const revenue = monthlyData.map(({ label, walletRaw, gatewayRaw }) => ({
-    label,
-    wallet:     Math.round((walletRaw  / maxVal) * 100),
-    gateway:    Math.round((gatewayRaw / maxVal) * 100),
-    walletRaw,
-    gatewayRaw,
-  }));
+  // Raw rupiah only — the chart scales its own axis.
+  const revenue = monthlyData;
 
   return NextResponse.json({ success: true, data: { stats, revenue } });
 }
