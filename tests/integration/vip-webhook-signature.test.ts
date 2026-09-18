@@ -107,6 +107,27 @@ describe("vip webhook signature enforcement", () => {
     expect(await statusOf(orderId)).toBe("SUCCESS");
   });
 
+  it("verifies against the credentials in site config rather than the environment", async () => {
+    // Rotating a key in site config must take effect here, since that is where
+    // the VIP adapter reads it from too.
+    const rotatedKey = "vip-rotated-api-key";
+    const orderId = await createProcessingOrder();
+    await prisma.siteConfig.create({
+      data: { key: "VIP_API_KEY", value: rotatedKey },
+    });
+    await enableStrictVerification();
+
+    const staleSignature = VALID_SIGNATURE;
+    expect(await vipWebhook(callback(staleSignature) as never)).toHaveProperty("status", 401);
+    expect(await statusOf(orderId)).toBe("PROCESSING_PROVIDER");
+
+    const rotatedSignature = createHash("md5").update(API_ID + rotatedKey).digest("hex");
+    const response = await vipWebhook(callback(rotatedSignature) as never);
+
+    expect(response.status).toBe(200);
+    expect(await statusOf(orderId)).toBe("SUCCESS");
+  });
+
   it("still processes an unsigned callback while strict verification is off", async () => {
     // Documents the staged rollout: the gap stays open until
     // VIP_WEBHOOK_SIGNATURE_REQUIRED is switched on in site config.

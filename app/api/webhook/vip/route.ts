@@ -73,11 +73,14 @@ export async function POST(req: NextRequest) {
   // switched on in site config. Every callback logs its verification outcome —
   // turn the flag on once production logs show genuine callbacks verifying.
   const signature = req.headers.get("x-client-signature") ?? "";
-  const apiId = process.env.VIP_API_ID ?? "";
-  const apiKey = process.env.VIP_API_KEY ?? "";
-  const signatureRequired = normalizeBool(
-    await getSiteConfigValue("VIP_WEBHOOK_SIGNATURE_REQUIRED", "")
-  );
+  // Read the credentials the same way the VIP adapter does — site config wins
+  // over env — otherwise a rotation done in one place breaks verification here.
+  const [apiId, apiKey, signatureRequiredRaw] = await Promise.all([
+    getSiteConfigValue("VIP_API_ID"),
+    getSiteConfigValue("VIP_API_KEY"),
+    getSiteConfigValue("VIP_WEBHOOK_SIGNATURE_REQUIRED", ""),
+  ]);
+  const signatureRequired = normalizeBool(signatureRequiredRaw);
 
   if (!apiId || !apiKey) {
     console.error("[Webhook/VIP] Signature unverifiable: VIP_API_ID/VIP_API_KEY belum diisi");
