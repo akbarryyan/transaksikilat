@@ -39,8 +39,7 @@ export default function TicketDetailPage({ params }: { params: Promise<{ id: str
   const [closing, setClosing] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
-  function loadTicket() {
-    setLoading(true);
+  function fetchTicket() {
     fetch(`/api/tickets/${id}`)
       .then((r) => r.json())
       .then((d) => { if (d.success) setTicket(d.data); })
@@ -48,8 +47,14 @@ export default function TicketDetailPage({ params }: { params: Promise<{ id: str
       .finally(() => setLoading(false));
   }
 
+  /** For refreshes triggered by the user, which should show the spinner again. */
+  function loadTicket() {
+    setLoading(true);
+    fetchTicket();
+  }
+
   useEffect(() => {
-    loadTicket();
+    fetchTicket();
   }, [id]);
 
 

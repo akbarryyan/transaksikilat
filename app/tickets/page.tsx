@@ -43,8 +43,7 @@ export default function TicketsPage() {
     return () => clearInterval(timer);
   }, []);
 
-  function loadTickets() {
-    setLoading(true);
+  function fetchTickets() {
     fetch("/api/tickets")
       .then((r) => r.json())
       .then((d) => { if (d.success) setTickets(d.data); })
@@ -52,8 +51,14 @@ export default function TicketsPage() {
       .finally(() => setLoading(false));
   }
 
+  /** For refreshes triggered by the user, which should show the spinner again. */
+  function loadTickets() {
+    setLoading(true);
+    fetchTickets();
+  }
+
   useEffect(() => {
-    loadTickets();
+    fetchTickets();
   }, []);
 
 

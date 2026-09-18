@@ -43,6 +43,13 @@ export interface CreateInvoiceInput {
 
 // ─── Repository ──────────────────────────────────────────────────────────────
 
+/** Provider payloads arrive untyped; Prisma wants a Json input or an explicit null. */
+function toJsonInput(value: unknown): Prisma.InputJsonValue | undefined {
+  return value === undefined || value === null
+    ? undefined
+    : (value as Prisma.InputJsonValue);
+}
+
 export class OrderRepository {
   // ── Order CRUD ──────────────────────────────────────────────────────────
 
@@ -217,8 +224,8 @@ export class OrderRepository {
     orderId: string;
     provider: string;
     action: string;
-    request?: Prisma.InputJsonValue | typeof Prisma.JsonNull;
-    response?: Prisma.InputJsonValue | typeof Prisma.JsonNull;
+    request?: unknown;
+    response?: unknown;
     success: boolean;
     errorMessage?: string;
   }) {
@@ -228,8 +235,8 @@ export class OrderRepository {
           orderId: data.orderId,
           provider: data.provider,
           action: data.action,
-          request: data.request ?? undefined,
-          response: data.response ?? undefined,
+          request: toJsonInput(data.request),
+          response: toJsonInput(data.response),
           success: data.success,
           errorMessage: data.errorMessage ?? null,
         },

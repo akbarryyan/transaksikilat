@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/src/infra/db/prisma";
 import { requireAdminSession } from "@/lib/admin";
+import { Prisma } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
 
@@ -104,7 +105,7 @@ export async function PUT(request: Request) {
     }
 
     // Prepare update data
-    const updateData: any = {};
+    const updateData: Prisma.ProductUpdateInput = {};
 
     if (margin !== undefined) {
       updateData.margin = margin;

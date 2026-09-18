@@ -246,6 +246,9 @@ export default function MembersPage() {
             >
               {importing ? "Mengimpor..." : "Import Excel"}
             </button>
+            {/* An API route serving a file download, not a page — Link would
+                try to client-navigate to it. */}
+            {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
             <a
               href="/api/admin/users/import/template"
               className="rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"

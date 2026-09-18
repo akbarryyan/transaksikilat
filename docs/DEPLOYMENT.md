@@ -21,8 +21,8 @@ Akun GitHub sedang **locked karena masalah billing**, jadi workflow `.github/wor
 
 ### Build & push dari laptop
 
-Jalankan gate-nya dulu. `npm run verify` menjalankan typecheck dan seluruh
-test suite — jangan build image kalau ini merah.
+Jalankan gate-nya dulu. `npm run verify` menjalankan typecheck, lint, dan
+seluruh test suite — jangan build image kalau ini merah.
 
 ```bash
 cd ~/Kerjaan/repository/transaksikilat
@@ -125,10 +125,8 @@ Selama akun GitHub masih locked, gate itu tidak pernah jalan — karena itu
 `npm run verify` di langkah build manual di atas adalah satu-satunya
 pelindung yang aktif sekarang.
 
-`npm run lint` sengaja **tidak** masuk gate: masih ada 57 error lint warisan
-di 38 file (mayoritas `no-explicit-any` dan `no-unescaped-entities`). Kalau
-dijadikan penghalang sekarang, semua deploy langsung terblokir. Bersihkan dulu
-baru masukkan ke `verify`.
+`npm run verify` menjalankan tiga hal: typecheck, lint, lalu seluruh test.
+Ketiganya harus hijau sebelum image dibangun.
 
 ## Setelah akun GitHub tidak locked lagi
 

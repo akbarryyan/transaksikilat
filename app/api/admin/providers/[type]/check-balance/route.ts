@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { ProviderManagementService } from "@/src/core/services/provider/provider-management.service";
 import { ProviderType } from "@/src/core/domain/enums/provider.enum";
 import { requireAdminSession } from "@/lib/admin";
+import { errorMessage } from "@/lib/errors";
 
 const providerService = new ProviderManagementService();
 
@@ -37,12 +38,12 @@ export async function POST(
       success: true,
       data: result,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Check balance error:", error);
     return NextResponse.json(
       { 
         success: false, 
-        error: error.message || "Failed to check balance" 
+        error: errorMessage(error, "Failed to check balance") 
       },
       { status: 500 }
     );

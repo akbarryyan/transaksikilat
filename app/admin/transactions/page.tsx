@@ -36,7 +36,7 @@ interface Transaction {
   user: User | null;
   product: Product;
   targetNumber: string;
-  targetData: any;
+  targetData: unknown;
   amount: number;
   status: string;
   paymentMethod: string;
@@ -56,8 +56,8 @@ interface ProviderLog {
   id: string;
   provider: string;
   action: string;
-  request: any;
-  response: any;
+  request: unknown;
+  response: unknown;
   success: boolean;
   errorMessage: string | null;
   createdAt: string;

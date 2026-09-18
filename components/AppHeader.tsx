@@ -91,7 +91,7 @@ export default function AppHeader({ onBack }: AppHeaderProps) {
             </Link>
           )}
           {/* Chat / CS */}
-          <a
+          <Link
             href="/tickets"
             className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-white/10 transition-colors relative"
             aria-label="Customer Service"
@@ -105,7 +105,7 @@ export default function AppHeader({ onBack }: AppHeaderProps) {
                 {unreadCount > 9 ? "9+" : unreadCount}
               </span>
             )}
-          </a>
+          </Link>
           {/* Bell */}
           <div className="relative">
             <button

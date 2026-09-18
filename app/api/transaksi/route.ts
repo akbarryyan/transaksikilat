@@ -46,7 +46,7 @@ export async function GET(req: NextRequest) {
       ];
     }
 
-    let [total, orders] = await Promise.all([
+    const [total, initialOrders] = await Promise.all([
       prisma.order.count({ where }),
       prisma.order.findMany({
         where,
@@ -73,6 +73,9 @@ export async function GET(req: NextRequest) {
         },
       }),
     ]);
+
+    // Hanya daftar order yang diperbarui setelah rekonsiliasi.
+    let orders = initialOrders;
 
     const reconcileCandidates = orders
       .filter((order) => order.status === "PAID" || order.status === "PROCESSING_PROVIDER")

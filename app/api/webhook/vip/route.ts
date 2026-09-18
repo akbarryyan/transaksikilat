@@ -55,9 +55,20 @@ function signatureMatches(received: string, expected: string): boolean {
   }
 }
 
+/** Only what this handler reads; VIP sends more, and `data` may be either shape. */
+interface VipCallbackItem {
+  trxid?: string;
+  status?: string;
+  note?: string;
+}
+
+interface VipCallbackPayload {
+  data?: VipCallbackItem | VipCallbackItem[];
+}
+
 export async function POST(req: NextRequest) {
   // ── 1. Parse body ─────────────────────────────────────────────────────────
-  let payload: any;
+  let payload: VipCallbackPayload;
   try {
     payload = await req.json();
   } catch {

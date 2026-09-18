@@ -25,7 +25,7 @@ export async function GET() {
     });
 
     // Group by provider
-    const productsData: Record<string, any[]> = {};
+    const productsData: Record<string, unknown[]> = {};
     
     allProducts.forEach((product) => {
       if (!productsData[product.provider]) {

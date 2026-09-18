@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { ProviderManagementService } from "@/src/core/services/provider/provider-management.service";
 import { ProviderType } from "@/src/core/domain/enums/provider.enum";
 import { requireAdminSession } from "@/lib/admin";
+import { errorMessage } from "@/lib/errors";
 
 const providerService = new ProviderManagementService();
 
@@ -41,12 +42,12 @@ export async function POST(
         products: result,
       },
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Sync products error:", error);
     return NextResponse.json(
       { 
         success: false, 
-        error: error.message || "Failed to sync products" 
+        error: errorMessage(error, "Failed to sync products") 
       },
       { status: 500 }
     );

@@ -37,7 +37,7 @@ export async function POST(request: Request) {
     }
 
     const service = new ProviderManagementService();
-    const results: Record<string, any> = {};
+    const results: Record<string, unknown> = {};
 
     // Test check balance
     if (operations.includes("checkBalance")) {

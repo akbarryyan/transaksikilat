@@ -5,6 +5,7 @@ import {
   PENDING_STATUSES,
   UNPAGINATED_ROW_LIMIT,
 } from "@/lib/admin-transactions";
+import { Prisma } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
 
@@ -43,7 +44,7 @@ export async function GET(request: Request) {
     );
 
     // Build where clause
-    const where: any = {};
+    const where: Prisma.OrderWhereInput = {};
 
     if (status)        where.status        = status;
     if (paymentMethod) where.paymentMethod = paymentMethod;

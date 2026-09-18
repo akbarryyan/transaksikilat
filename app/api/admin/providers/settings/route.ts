@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ProviderRepository } from "@/src/infra/db/repositories/provider.repository";
 import { requireAdminSession } from "@/lib/admin";
+import { errorMessage } from "@/lib/errors";
 
 const providerRepo = new ProviderRepository();
 
@@ -28,12 +29,12 @@ export async function GET() {
       success: true,
       data: serializedSettings,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Get settings error:", error);
     return NextResponse.json(
       { 
         success: false, 
-        error: error.message || "Failed to get provider settings" 
+        error: errorMessage(error, "Failed to get provider settings") 
       },
       { status: 500 }
     );
@@ -111,12 +112,12 @@ export async function PUT(request: NextRequest) {
       success: true,
       data: serializedSetting,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Update settings error:", error);
     return NextResponse.json(
       { 
         success: false, 
-        error: error.message || "Failed to update provider settings" 
+        error: errorMessage(error, "Failed to update provider settings") 
       },
       { status: 500 }
     );

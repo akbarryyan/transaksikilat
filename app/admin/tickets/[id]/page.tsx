@@ -41,8 +41,7 @@ export default function AdminTicketDetailPage({ params }: { params: Promise<{ id
   const bottomRef = useRef<HTMLDivElement>(null);
   const toast = useToast();
 
-  function loadTicket() {
-    setLoading(true);
+  function fetchTicket() {
     fetch(`/api/admin/tickets/${id}`)
       .then((r) => r.json())
       .then((d) => { if (d.success) setTicket(d.data); })
@@ -50,7 +49,13 @@ export default function AdminTicketDetailPage({ params }: { params: Promise<{ id
       .finally(() => setLoading(false));
   }
 
-  useEffect(() => { loadTicket(); }, [id]);
+  /** For refreshes triggered by the user, which should show the spinner again. */
+  function loadTicket() {
+    setLoading(true);
+    fetchTicket();
+  }
+
+  useEffect(() => { fetchTicket(); }, [id]);
 
 
   useEffect(() => {

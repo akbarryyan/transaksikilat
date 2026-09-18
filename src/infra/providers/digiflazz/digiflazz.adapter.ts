@@ -1,3 +1,17 @@
+import { createHash } from "crypto";
+
+/** Only the fields this adapter reads; Digiflazz returns more. */
+interface DigiflazzCatalogItem {
+  buyer_sku_code: string;
+  product_name: string;
+  category: string;
+  brand: string;
+  type: string;
+  price: string | number;
+  seller_product_status?: boolean;
+  buyer_product_status?: boolean;
+  desc?: string;
+}
 import {
   IProviderPort,
   ProviderBalance,
@@ -97,13 +111,13 @@ export class DigiflazzAdapter implements IProviderPort {
         return [];
       }
 
-      return data.data.map((item: any) => ({
+      return data.data.map((item: DigiflazzCatalogItem) => ({
         providerCode: item.buyer_sku_code,
         providerName: item.product_name,
         category: item.category,
         brand: item.brand,
         type: item.type,
-        price: parseFloat(item.price),
+        price: Number(item.price),
         stock: item.seller_product_status === true || item.buyer_product_status === true,
         description: item.desc,
       }));
@@ -237,8 +251,7 @@ export class DigiflazzAdapter implements IProviderPort {
   }
 
   private generateSignature(refId: string): string {
-    const crypto = require("crypto");
-    const md5 = crypto.createHash("md5");
+    const md5 = createHash("md5");
     md5.update(this.username + this.apiKey + refId);
     return md5.digest("hex");
   }

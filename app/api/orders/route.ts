@@ -27,7 +27,7 @@ export async function GET(request: Request) {
     const limit = Math.min(50, Math.max(1, Number(searchParams.get("limit") ?? 10)));
     const skip = (page - 1) * limit;
 
-    let [orders, total] = await Promise.all([
+    const [initialOrders, total] = await Promise.all([
       prisma.order.findMany({
         where: { userId: session.userId },
         orderBy: { createdAt: "desc" },
@@ -54,6 +54,9 @@ export async function GET(request: Request) {
       }),
       prisma.order.count({ where: { userId: session.userId } }),
     ]);
+
+    // Hanya daftar order yang diperbarui setelah rekonsiliasi.
+    let orders = initialOrders;
 
     const reconcileCandidates = orders
       .filter((order) => order.status === "PAID" || order.status === "PROCESSING_PROVIDER")
