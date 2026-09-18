@@ -20,6 +20,11 @@ Semua logic transaksi ada di service/usecase.
 Contoh:
 - `CreateCheckoutService`
 - `HandlePakasirWebhookService`
+
+> **Catatan (2026-09-18):** Pakasir sudah tidak dipakai dan integrasinya dihapus.
+> Payment gateway yang aktif hanya **Poppay**. Bagian di bawah yang menyebut
+> Pakasir hanya berlaku secara historis.
+
 - `ExecuteProviderPurchaseJobService`
 
 ### 1.3 Ports & Adapters

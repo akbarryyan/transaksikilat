@@ -19,6 +19,11 @@
 
 ### External Integrations
 - **Payment Gateway:** Pakasir  
+
+> **Catatan (2026-09-18):** Pakasir sudah tidak dipakai dan integrasinya dihapus.
+> Payment gateway yang aktif hanya **Poppay**. Bagian di bawah yang menyebut
+> Pakasir hanya berlaku secara historis.
+
   - SDK: `pakasir-sdk`  
   - Webhook: payment status callback  
 - **Provider PPOB:** Digiflazz + VIP Reseller  

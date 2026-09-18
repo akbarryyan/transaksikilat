@@ -30,6 +30,7 @@ export enum LedgerType {
 }
 
 export enum WebhookSource {
+  /** Integration removed; kept because historical webhook_events rows use it. */
   PAKASIR = "PAKASIR",
   POPPAY = "POPPAY",
   DIGIFLAZZ = "DIGIFLAZZ",

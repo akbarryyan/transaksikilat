@@ -7,7 +7,6 @@
  * Keys:
  *   PROVIDER_DIGIFLAZZ_MODE  — "mock" | "real"
  *   PROVIDER_VIP_MODE        — "mock" | "real"
- *   PROVIDER_PAKASIR_MODE    — "sandbox" | "production"  (keduanya call API, beda env)
  */
 
 import { prisma } from "@/src/infra/db/prisma";
@@ -167,12 +166,10 @@ export async function setBannerImages(urls: string[]): Promise<void> {
 // ── Helpers for provider modes ────────────────────────────────────────────────
 
 export type ProviderMode = "mock" | "real";
-export type PakasirMode = "sandbox" | "production";
 
 const ENV_KEY_MAP: Record<string, string> = {
   PROVIDER_DIGIFLAZZ_MODE: "PROVIDER_DIGIFLAZZ_MODE",
   PROVIDER_VIP_MODE: "PROVIDER_VIP_MODE",
-  PROVIDER_PAKASIR_MODE: "PROVIDER_PAKASIR_MODE",
 };
 
 /**
@@ -192,27 +189,10 @@ export async function getProviderMode(configKey: string): Promise<ProviderMode> 
   return "mock";
 }
 
-/**
- * Get the Pakasir payment gateway mode (sandbox | production).
- * Keduanya memanggil API Pakasir yang nyata — beda hanya di credentials.
- * Priority: DB value → env var → "sandbox" (safe default)
- */
-export async function getPakasirMode(): Promise<PakasirMode> {
-  const dbVal = await getSiteConfig("PROVIDER_PAKASIR_MODE");
-  if (dbVal === "production") return "production";
-  if (dbVal === "sandbox") return "sandbox";
-
-  const envVal = process.env.PROVIDER_PAKASIR_MODE;
-  if (envVal?.toLowerCase() === "production") return "production";
-
-  return "sandbox";
-}
-
-/** Get all three provider modes at once (single cache read) */
+/** Get both provider modes at once (single cache read) */
 export async function getAllProviderModes(): Promise<{
   DIGIFLAZZ: ProviderMode;
   VIP_RESELLER: ProviderMode;
-  PAKASIR: PakasirMode;
 }> {
   const cfg = await getAllSiteConfig();
 
@@ -225,19 +205,9 @@ export async function getAllProviderModes(): Promise<{
     return "mock";
   }
 
-  function resolvePakasirMode(): PakasirMode {
-    const dbVal = cfg["PROVIDER_PAKASIR_MODE"];
-    if (dbVal === "production") return "production";
-    if (dbVal === "sandbox") return "sandbox";
-    const envVal = process.env.PROVIDER_PAKASIR_MODE;
-    if (envVal?.toLowerCase() === "production") return "production";
-    return "sandbox";
-  }
-
   return {
     DIGIFLAZZ: resolveProviderMode("PROVIDER_DIGIFLAZZ_MODE", "PROVIDER_DIGIFLAZZ_MODE"),
     VIP_RESELLER: resolveProviderMode("PROVIDER_VIP_MODE", "PROVIDER_VIP_MODE"),
-    PAKASIR: resolvePakasirMode(),
   };
 }
 
