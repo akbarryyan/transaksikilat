@@ -147,6 +147,10 @@ export async function POST(request: Request) {
   try {
     const verification = await verifyPoppayWebhookSignature(request.headers, rawBody, payload);
 
+    // Logged on every callback so the strict flag can be switched on once
+    // genuine traffic is seen reporting "verified".
+    console.log(`[Webhook/Poppay] Signature ${verification.mode}`);
+
     if (verification.mode === "invalid" && verification.required) {
       console.warn("[Webhook/Poppay] Callback ditolak, signature tidak valid:", verification.reason);
       return NextResponse.json(
