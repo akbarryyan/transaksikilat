@@ -367,8 +367,8 @@ function OrderDetailPageContent() {
                 </svg>
               </div>
               <div>
-                <p className="text-sm font-bold text-green-800 lg:text-green-50">Transaksi Berhasil!</p>
-                <p className="text-[11px] text-green-600 lg:text-green-100/80">Produk sudah berhasil diproses.</p>
+                <p className="text-sm font-bold text-green-800">Transaksi Berhasil!</p>
+                <p className="text-[11px] text-green-600">Produk sudah berhasil diproses.</p>
               </div>
             </div>
           )}
@@ -382,8 +382,8 @@ function OrderDetailPageContent() {
                 </svg>
               </div>
               <div>
-                <p className="text-sm font-bold text-blue-800 lg:text-blue-50">Pembayaran Diterima</p>
-                <p className="text-[11px] text-blue-600 lg:text-blue-100/80">
+                <p className="text-sm font-bold text-blue-800">Pembayaran Diterima</p>
+                <p className="text-[11px] text-blue-600">
                   Produk sedang diproses, harap tunggu sebentar.
                 </p>
               </div>
@@ -399,8 +399,8 @@ function OrderDetailPageContent() {
                 </svg>
               </div>
               <div>
-                <p className="text-sm font-bold text-yellow-800 lg:text-yellow-50">Belum Dibayar</p>
-                <p className="text-[11px] text-yellow-700 lg:text-yellow-100/80">Selesaikan pembayaran sebelum kedaluwarsa.</p>
+                <p className="text-sm font-bold text-yellow-800">Belum Dibayar</p>
+                <p className="text-[11px] text-yellow-700">Selesaikan pembayaran sebelum kedaluwarsa.</p>
               </div>
             </div>
           )}
@@ -413,8 +413,8 @@ function OrderDetailPageContent() {
                 </svg>
               </div>
               <div>
-                <p className="text-sm font-bold text-red-800 lg:text-red-50">Transaksi Gagal</p>
-                <p className="text-[11px] text-red-600 lg:text-red-100/80">
+                <p className="text-sm font-bold text-red-800">Transaksi Gagal</p>
+                <p className="text-[11px] text-red-600">
                   {order.notes ?? "Hubungi support jika saldo sudah terpotong."}
                 </p>
               </div>
@@ -478,15 +478,9 @@ function OrderDetailPageContent() {
               <div className="flex justify-between">
                 <span className="text-xs text-slate-500">Harga Produk</span>
                 <span className="text-xs font-semibold text-slate-700 lg:text-slate-700">
-                  Rp {formatPrice(order.amount - order.fee)}
+                  Rp {formatPrice(order.amount)}
                 </span>
               </div>
-              {order.fee > 0 && (
-                <div className="flex justify-between">
-                  <span className="text-xs text-slate-500">Biaya Admin</span>
-                  <span className="text-xs text-slate-600">Rp {formatPrice(order.fee)}</span>
-                </div>
-              )}
               <div className="border-t border-slate-100 pt-2 flex justify-between">
                 <span className="text-xs font-bold text-slate-600">Total Bayar</span>
                 <span className="text-sm font-black text-slate-800 lg:text-slate-800">Rp {formatPrice(order.amount)}</span>
@@ -539,10 +533,10 @@ function OrderDetailPageContent() {
               <p className="text-[11px] font-bold text-green-700 mb-1.5">
                 ✅ Serial Number / Kode Voucher
               </p>
-              <p className="break-all text-base font-mono font-black tracking-wide text-green-800 lg:text-green-50">
+              <p className="break-all text-base font-mono font-black tracking-wide text-green-800">
                 {order.serialNumber}
               </p>
-              <p className="mt-1.5 text-[10px] text-green-600 lg:text-green-100/80">
+              <p className="mt-1.5 text-[10px] text-green-600">
                 Screenshot atau salin kode ini sebagai bukti pembelian.
               </p>
             </div>
@@ -670,7 +664,7 @@ function OrderDetailPageContent() {
             !order.serialNumber && (
               <div className="flex gap-2.5 rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 lg:border-blue-500/20 lg:bg-blue-500/10">
                 <div className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin flex-shrink-0 mt-0.5" />
-                <p className="text-[11px] leading-relaxed text-blue-700 lg:text-blue-100/80">
+                <p className="text-[11px] leading-relaxed text-blue-700">
                   Memproses pembelian... Serial number akan muncul di sini setelah berhasil.
                   Tekan tombol refresh untuk memperbarui status.
                 </p>
