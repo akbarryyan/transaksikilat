@@ -23,6 +23,21 @@ function parseEnvFile(path: string): Record<string, string> {
   return out;
 }
 
+const FALLBACK_SESSION_SECRET = "test-session-secret-at-least-32-characters";
+
+/**
+ * Never let a misconfigured env point the suite at a dev or production
+ * database — every test run truncates tables.
+ */
+function assertTestDatabase(): void {
+  const dbName = new URL(process.env.DATABASE_URL!).pathname.replace(/^\//, "");
+  if (!dbName.endsWith("_test")) {
+    throw new Error(
+      `Refusing to run: test database name must end with '_test', got '${dbName}'.`
+    );
+  }
+}
+
 function toTestDatabaseUrl(url: string): string {
   const parsed = new URL(url);
   const name = parsed.pathname.replace(/^\//, "");
@@ -32,8 +47,15 @@ function toTestDatabaseUrl(url: string): string {
 }
 
 function loadEnv(): void {
-  // .env.test wins when present; otherwise derive from .env.local so a fresh
-  // clone needs no extra file to run the suite.
+  // An explicit DATABASE_URL wins, which is how CI hands over its service
+  // container. Then .env.test, then .env.local with '_test' appended to the
+  // database name so a fresh clone needs no extra file to run the suite.
+  if (process.env.DATABASE_URL?.trim()) {
+    assertTestDatabase();
+    process.env.SESSION_SECRET ||= FALLBACK_SESSION_SECRET;
+    return;
+  }
+
   const explicit = resolve(ROOT, ".env.test");
   if (existsSync(explicit)) {
     Object.assign(process.env, parseEnvFile(explicit));
@@ -52,17 +74,10 @@ function loadEnv(): void {
     Object.assign(process.env, vars);
   }
 
-  // Never let a misconfigured env point the suite at a dev or production
-  // database — every test run truncates tables.
-  const dbName = new URL(process.env.DATABASE_URL!).pathname.replace(/^\//, "");
-  if (!dbName.endsWith("_test")) {
-    throw new Error(
-      `Refusing to run: test database name must end with '_test', got '${dbName}'.`
-    );
-  }
+  assertTestDatabase();
 
   // Vitest already sets NODE_ENV=test.
-  process.env.SESSION_SECRET ||= "test-session-secret-at-least-32-characters";
+  process.env.SESSION_SECRET ||= FALLBACK_SESSION_SECRET;
 }
 
 loadEnv();

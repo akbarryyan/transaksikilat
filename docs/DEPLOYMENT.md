@@ -21,9 +21,14 @@ Akun GitHub sedang **locked karena masalah billing**, jadi workflow `.github/wor
 
 ### Build & push dari laptop
 
+Jalankan gate-nya dulu. `npm run verify` menjalankan typecheck dan seluruh
+test suite — jangan build image kalau ini merah.
+
 ```bash
 cd ~/Kerjaan/repository/transaksikilat
 git pull origin main
+
+npm run verify
 
 docker build \
   --build-arg NEXT_PUBLIC_APP_URL="https://transaksikilat.com" \
@@ -51,6 +56,25 @@ docker compose up -d
 docker inspect transaksikilat-app --format '{{.Config.Image}}'   # harus ghcr.io/akbarryyan/transaksikilat:latest
 ```
 
+**Kalau rilisnya mengandung migration database**, sisipkan satu langkah di
+antara `pull` dan `up -d`:
+
+```bash
+docker compose pull
+docker compose run --rm transaksikilat-app npx prisma migrate deploy
+docker compose up -d
+```
+
+Migration dijalankan memakai image baru selagi container lama masih melayani
+trafik, jadi tidak ada jeda mati. Kalau urutannya dibalik, container baru naik
+sebelum tabelnya ada dan request yang menyentuhnya akan gagal.
+
+Cek apakah sebuah rilis mengandung migration:
+
+```bash
+git diff --name-only <sha-terakhir-dideploy>..HEAD -- prisma/migrations
+```
+
 Login GHCR di VPS (sekali saja, token cukup scope `read:packages`):
 
 ```bash
@@ -58,6 +82,22 @@ echo "<PAT_READ_PACKAGES>" | docker login ghcr.io -u akbarryyan --password-stdin
 ```
 
 Lalu smoke test: buka domain production, cek halaman utama, login, dan minimal satu alur transaksi.
+
+## Gate test
+
+`.github/workflows/build-and-push.yml` punya dua job: `verify` menjalankan
+typecheck dan seluruh test suite terhadap MySQL sungguhan, lalu `build-and-push`
+hanya berjalan kalau `verify` hijau. Jadi image tidak akan pernah sampai ke
+registry dari kode yang test-nya merah.
+
+Selama akun GitHub masih locked, gate itu tidak pernah jalan — karena itu
+`npm run verify` di langkah build manual di atas adalah satu-satunya
+pelindung yang aktif sekarang.
+
+`npm run lint` sengaja **tidak** masuk gate: masih ada 57 error lint warisan
+di 38 file (mayoritas `no-explicit-any` dan `no-unescaped-entities`). Kalau
+dijadikan penghalang sekarang, semua deploy langsung terblokir. Bersihkan dulu
+baru masukkan ke `verify`.
 
 ## Setelah akun GitHub tidak locked lagi
 

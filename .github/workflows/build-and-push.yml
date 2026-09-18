@@ -9,7 +9,46 @@ permissions:
   packages: write
 
 jobs:
+  verify:
+    runs-on: ubuntu-latest
+
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: transaksikilat_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=15
+
+    env:
+      # The suite refuses to run against a database whose name does not end in
+      # _test, because every run truncates tables.
+      DATABASE_URL: mysql://root:root@127.0.0.1:3306/transaksikilat_test
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # Matches the Dockerfile's base image.
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - run: npx prisma migrate deploy
+
+      - run: npm run verify
+
   build-and-push:
+    # No image reaches the registry unless the suite passes.
+    needs: verify
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
