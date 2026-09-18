@@ -185,40 +185,35 @@ async function handlePoppayWithdrawal(
 
   if (outcome.kind === "COMPLETED") {
     await prisma.$transaction(async (tx) => {
-      const wallet = await tx.wallet.findUnique({ where: { userId: withdrawal.userId } });
-      const existingPaidLedger = wallet
-        ? await tx.ledgerEntry.findFirst({
-            where: {
-              walletId: wallet.id,
-              type: "WITHDRAW_PAID",
-              reference: withdrawal.id,
-            },
-            select: { id: true },
-          })
-        : null;
-
-      if (wallet && !existingPaidLedger) {
-        await tx.ledgerEntry.create({
-          data: {
-            walletId: wallet.id,
-            type: "WITHDRAW_PAID",
-            amount: withdrawal.amount,
-            balanceBefore: wallet.balance,
-            balanceAfter: wallet.balance,
-            reference: withdrawal.id,
-            description: `Withdraw seller dibayar ${withdrawal.id}`,
-          },
-        });
-      }
-
-      await tx.sellerWithdrawalRequest.update({
-        where: { id: withdrawal.id },
+      // Claiming the transition to PAID is the gate: reading the ledger and
+      // then writing lets two callbacks for the same payout each record it.
+      const claimed = await tx.sellerWithdrawalRequest.updateMany({
+        where: { id: withdrawal.id, status: { not: "PAID" } },
         data: {
           status: outcome.requestStatus,
           payoutRefId: payload.refid,
           payoutAggRefId: payload.agg_refid,
           payoutRawPayload: rawPayloadJson(payload),
           processedAt: new Date(),
+        },
+      });
+
+      if (claimed.count === 0) return;
+
+      const wallet = await tx.wallet.findUnique({ where: { userId: withdrawal.userId } });
+      if (!wallet) return;
+
+      // The money already left at approval time, so this only records the
+      // payout — the balance does not move.
+      await tx.ledgerEntry.create({
+        data: {
+          walletId: wallet.id,
+          type: "WITHDRAW_PAID",
+          amount: withdrawal.amount,
+          balanceBefore: wallet.balance,
+          balanceAfter: wallet.balance,
+          reference: withdrawal.id,
+          description: `Withdraw seller dibayar ${withdrawal.id}`,
         },
       });
     });

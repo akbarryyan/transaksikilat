@@ -22,11 +22,12 @@
  *   error                → FAILED
  */
 
-import { createHash } from "crypto";
+import { createHash, timingSafeEqual } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { OrderRepository } from "@/src/infra/db/repositories/order.repository";
 import { OrderStatus } from "@/src/core/domain/enums/order.enum";
 import { checkAndUpgradeUserTier } from "@/lib/pricing";
+import { getSiteConfigValue } from "@/lib/site-config";
 
 export const dynamic = "force-dynamic";
 
@@ -35,6 +36,23 @@ const VIP_WEBHOOK_IP = "178.248.73.218";
 
 function ok() {
   return NextResponse.json({ success: true }, { status: 200 });
+}
+
+function rejected(reason: string) {
+  return NextResponse.json({ success: false, error: reason }, { status: 401 });
+}
+
+function normalizeBool(value: string): boolean {
+  return ["1", "true", "yes", "on"].includes(value.trim().toLowerCase());
+}
+
+function signatureMatches(received: string, expected: string): boolean {
+  if (received.length !== expected.length) return false;
+  try {
+    return timingSafeEqual(Buffer.from(received), Buffer.from(expected));
+  } catch {
+    return false;
+  }
 }
 
 export async function POST(req: NextRequest) {
@@ -50,14 +68,28 @@ export async function POST(req: NextRequest) {
   console.log("[Webhook/VIP] Received:", JSON.stringify(payload));
 
   // ── 2. Validasi signature ─────────────────────────────────────────────────
+  // Staged rollout: a wrong signature is always refused, but a callback with no
+  // signature at all is only refused once VIP_WEBHOOK_SIGNATURE_REQUIRED is
+  // switched on in site config. Every callback logs its verification outcome —
+  // turn the flag on once production logs show genuine callbacks verifying.
   const signature = req.headers.get("x-client-signature") ?? "";
   const apiId = process.env.VIP_API_ID ?? "";
   const apiKey = process.env.VIP_API_KEY ?? "";
-  const expectedSig = createHash("md5").update(apiId + apiKey).digest("hex");
+  const signatureRequired = normalizeBool(
+    await getSiteConfigValue("VIP_WEBHOOK_SIGNATURE_REQUIRED", "")
+  );
 
-  if (signature && expectedSig && signature !== expectedSig) {
-    console.warn("[Webhook/VIP] Invalid signature. Received:", signature);
-    return NextResponse.json({ success: false, error: "Invalid signature" }, { status: 401 });
+  if (!apiId || !apiKey) {
+    console.error("[Webhook/VIP] Signature unverifiable: VIP_API_ID/VIP_API_KEY belum diisi");
+    if (signatureRequired) return rejected("Signature verification unavailable");
+  } else if (!signature) {
+    console.warn("[Webhook/VIP] Signature absent: callback tanpa header X-Client-Signature");
+    if (signatureRequired) return rejected("Missing signature");
+  } else if (!signatureMatches(signature, createHash("md5").update(apiId + apiKey).digest("hex"))) {
+    console.warn("[Webhook/VIP] Signature invalid. Received:", signature);
+    return rejected("Invalid signature");
+  } else {
+    console.log("[Webhook/VIP] Signature verified");
   }
 
   // ── 3. Validasi IP (optional extra security) ───────────────────────────────

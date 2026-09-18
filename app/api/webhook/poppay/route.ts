@@ -5,8 +5,13 @@ import { handlePoppayCallback, type PoppayCallbackPayload } from "@/lib/poppay-c
 
 export const dynamic = "force-dynamic";
 
-type VerificationResult =
-  | { mode: "verified" | "skipped" | "invalid"; reason?: string };
+type VerificationResult = {
+  mode: "verified" | "skipped" | "invalid";
+  /** Whether POPPAY_WEBHOOK_SIGNATURE_REQUIRED is on, i.e. whether a failed
+   *  verification should refuse the callback rather than just warn. */
+  required: boolean;
+  reason?: string;
+};
 
 function readHeader(headers: Headers, keys: string[]): string {
   for (const key of keys) {
@@ -54,9 +59,9 @@ async function verifyPoppayWebhookSignature(
 
   if (!secret) {
     if (signatureRequired) {
-      return { mode: "invalid", reason: "POPPAY_SECRET_KEY belum diisi saat strict verification aktif." };
+      return { mode: "invalid", required: true, reason: "POPPAY_SECRET_KEY belum diisi saat strict verification aktif." };
     }
-    return { mode: "skipped" };
+    return { mode: "skipped", required: false };
   }
 
   const signature = readHeader(headers, [
@@ -74,10 +79,10 @@ async function verifyPoppayWebhookSignature(
 
   if (!signature) {
     if (signatureRequired) {
-      return { mode: "invalid", reason: "Header signature callback tidak ditemukan." };
+      return { mode: "invalid", required: true, reason: "Header signature callback tidak ditemukan." };
     }
     console.warn("[Webhook/Poppay] Signature header tidak ditemukan; verifikasi dilewati.");
-    return { mode: "skipped" };
+    return { mode: "skipped", required: false };
   }
 
   const compactBody = rawBody.trim();
@@ -104,10 +109,10 @@ async function verifyPoppayWebhookSignature(
 
   const isValid = candidates.some((candidate) => safeEqualHex(candidate, signature));
   if (!isValid) {
-    return { mode: "invalid", reason: "Signature callback Poppay tidak valid." };
+    return { mode: "invalid", required: signatureRequired, reason: "Signature callback Poppay tidak valid." };
   }
 
-  return { mode: "verified" };
+  return { mode: "verified", required: signatureRequired };
 }
 
 export async function POST(request: Request) {
@@ -141,7 +146,19 @@ export async function POST(request: Request) {
 
   try {
     const verification = await verifyPoppayWebhookSignature(request.headers, rawBody, payload);
+
+    if (verification.mode === "invalid" && verification.required) {
+      console.warn("[Webhook/Poppay] Callback ditolak, signature tidak valid:", verification.reason);
+      return NextResponse.json(
+        { status: "error", message: "Invalid signature" },
+        { status: 401 }
+      );
+    }
+
     if (verification.mode === "invalid") {
+      // POPPAY_WEBHOOK_SIGNATURE_REQUIRED is off, so the callback still runs
+      // and leans on the inquiry cross-check. Turn the flag on once production
+      // logs show genuine callbacks reporting verification "verified".
       console.warn("[Webhook/Poppay] Signature tidak tervalidasi, lanjut dengan cross-check inquiry:", verification.reason);
     }
 

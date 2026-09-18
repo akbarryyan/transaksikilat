@@ -29,6 +29,20 @@ async function createUser(balance: number): Promise<string> {
   return user.id;
 }
 
+async function createApprovedWithdrawal(userId: string) {
+  return prisma.sellerWithdrawalRequest.create({
+    data: {
+      userId,
+      amount: AMOUNT,
+      status: "APPROVED",
+      accountName: "Poppay Subject",
+      accountNumber: "1234567890",
+      bankName: "BCA",
+      payoutGateway: "POPPAY",
+    },
+  });
+}
+
 async function walletState(userId: string, ledgerType: string) {
   const wallet = await prisma.wallet.findUniqueOrThrow({ where: { userId } });
   const entries = await prisma.ledgerEntry.findMany({
@@ -74,19 +88,29 @@ describe("poppay callbacks under concurrency", () => {
     expect(state.entries).toBe(1);
   });
 
+  it("records a paid withdrawal once when two callbacks for it arrive at the same time", async () => {
+    const userId = await createUser(0);
+    const withdrawal = await createApprovedWithdrawal(userId);
+
+    await Promise.all(
+      callbackPair(`withdraw-${withdrawal.id}`, POPPAY_STATUS_COMPLETED).map(
+        (payload) => handlePoppayCallback(payload, payload)
+      )
+    );
+
+    const state = await walletState(userId, "WITHDRAW_PAID");
+    expect(state.entries).toBe(1);
+    expect(state.balance).toBe(0);
+
+    const settled = await prisma.sellerWithdrawalRequest.findUniqueOrThrow({
+      where: { id: withdrawal.id },
+    });
+    expect(settled.status).toBe("PAID");
+  });
+
   it("releases a rejected withdrawal once when two callbacks for it arrive at the same time", async () => {
     const userId = await createUser(0);
-    const withdrawal = await prisma.sellerWithdrawalRequest.create({
-      data: {
-        userId,
-        amount: AMOUNT,
-        status: "APPROVED",
-        accountName: "Poppay Subject",
-        accountNumber: "1234567890",
-        bankName: "BCA",
-        payoutGateway: "POPPAY",
-      },
-    });
+    const withdrawal = await createApprovedWithdrawal(userId);
 
     await Promise.all(
       callbackPair(`withdraw-${withdrawal.id}`, POPPAY_STATUS_REJECTED).map(
