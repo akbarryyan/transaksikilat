@@ -137,28 +137,38 @@ export async function POST(req: NextRequest) {
         });
       }
 
-      const balanceBefore = Number(wallet.balance);
-      let balanceDelta: number;
+      const isCredit =
+        action === "CREDIT" || action === "RELEASE" || action === "REFUND";
 
-      // Hitung delta berdasarkan action
-      if (action === "CREDIT" || action === "RELEASE" || action === "REFUND") {
-        // Tambah saldo
-        balanceDelta = parsedAmount;
+      // Both branches move the balance in a single conditional UPDATE, so two
+      // simultaneous operations cannot read the same starting balance and both
+      // write their own total over it.
+      let balanceAfter: number;
+      if (isCredit) {
+        const credited = await tx.wallet.update({
+          where: { id: wallet!.id },
+          data: { balance: { increment: parsedAmount } },
+        });
+        balanceAfter = Number(credited.balance);
       } else {
-        // HOLD / DEBIT — kurangi saldo
-        if (balanceBefore < parsedAmount) {
-          throw new Error(`Saldo tidak cukup. Saldo saat ini: Rp ${balanceBefore.toLocaleString("id")}`);
+        const debited = await tx.wallet.updateMany({
+          where: { id: wallet!.id, balance: { gte: parsedAmount } },
+          data: { balance: { decrement: parsedAmount } },
+        });
+        if (debited.count === 0) {
+          const current = await tx.wallet.findUniqueOrThrow({ where: { id: wallet!.id } });
+          throw new Error(
+            `Saldo tidak cukup. Saldo saat ini: Rp ${Number(current.balance).toLocaleString("id")}`
+          );
         }
-        balanceDelta = -parsedAmount;
+        balanceAfter = Number(
+          (await tx.wallet.findUniqueOrThrow({ where: { id: wallet!.id } })).balance
+        );
       }
 
-      const balanceAfter = balanceBefore + balanceDelta;
-
-      // Update balance
-      await tx.wallet.update({
-        where: { id: wallet!.id },
-        data: { balance: new Prisma.Decimal(balanceAfter) },
-      });
+      const balanceBefore = isCredit
+        ? balanceAfter - parsedAmount
+        : balanceAfter + parsedAmount;
 
       // Catat ledger
       const entry = await tx.ledgerEntry.create({

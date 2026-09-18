@@ -67,40 +67,14 @@ export async function handleWalletTopupWebhook(
   }
 
   // Credit wallet atomically
-  await prisma.$transaction(async (tx) => {
-    // Upsert wallet (ensure it exists)
-    const wallet = await tx.wallet.upsert({
-      where: { userId: topup.userId },
-      create: { userId: topup.userId, balance: 0 },
-      update: {},
-    });
-
-    const balanceBefore = Number(wallet.balance);
-    const creditAmount  = Number(topup.amount);
-    const balanceAfter  = balanceBefore + creditAmount;
-
-    // Update balance
-    await tx.wallet.update({
-      where: { id: wallet.id },
-      data: { balance: balanceAfter },
-    });
-
-    // Write ledger entry
-    await tx.ledgerEntry.create({
-      data: {
-        walletId:      wallet.id,
-        type:          "CREDIT",
-        amount:        creditAmount,
-        balanceBefore,
-        balanceAfter,
-        reference:     topupCode,
-        description:   `Top Up Saldo via ${detail.method ?? "Payment Gateway"}`,
-      },
-    });
-
-    // Mark topup COMPLETED
-    await tx.walletTopup.update({
-      where: { id: topup.id },
+  const credited = await prisma.$transaction(async (tx) => {
+    // Claim the top-up first: flipping PENDING -> COMPLETED is the idempotency
+    // gate. Gateways retry callbacks, and the status check further up only
+    // catches deliveries that arrive one after another — two arriving at once
+    // both read PENDING and would each credit the wallet. Only the transaction
+    // that wins this conditional update may credit.
+    const claimed = await tx.walletTopup.updateMany({
+      where: { id: topup.id, status: "PENDING" },
       data: {
         status:        "COMPLETED",
         paymentMethod: detail.method ?? topup.paymentMethod,
@@ -109,7 +83,46 @@ export async function handleWalletTopupWebhook(
         totalPayment:  detail.totalPayment,
       },
     });
+
+    if (claimed.count === 0) return false;
+
+    // Upsert wallet (ensure it exists)
+    const wallet = await tx.wallet.upsert({
+      where: { userId: topup.userId },
+      create: { userId: topup.userId, balance: 0 },
+      update: {},
+    });
+
+    const creditAmount = Number(topup.amount);
+    const balanceAfter = Number(
+      (
+        await tx.wallet.update({
+          where: { id: wallet.id },
+          data: { balance: { increment: creditAmount } },
+        })
+      ).balance
+    );
+
+    // Write ledger entry
+    await tx.ledgerEntry.create({
+      data: {
+        walletId:      wallet.id,
+        type:          "CREDIT",
+        amount:        creditAmount,
+        balanceBefore: balanceAfter - creditAmount,
+        balanceAfter,
+        reference:     topupCode,
+        description:   `Top Up Saldo via ${detail.method ?? "Payment Gateway"}`,
+      },
+    });
+
+    return true;
   });
+
+  if (!credited) {
+    console.log(`[WalletTopupWebhook] Already COMPLETED by a concurrent delivery: ${topupCode}`);
+    return { action: "already_completed", topupId: topup.id };
+  }
 
   console.log(`[WalletTopupWebhook] User ${topup.userId} saldo +${topup.amount} (${topupCode})`);
 

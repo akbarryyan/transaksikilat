@@ -124,17 +124,22 @@ export async function POST(req: NextRequest) {
         });
       }
 
-      const balanceBefore = Number(wallet.balance);
-      if (balanceBefore < parsed.data.amount) {
+      // Debit in one conditional UPDATE. Checking the balance and then writing
+      // a computed total lets simultaneous withdrawals each read the same
+      // balance and all pass — money that then leaves to a real bank account.
+      const debited = await tx.wallet.updateMany({
+        where: { id: wallet.id, balance: { gte: parsed.data.amount } },
+        data: { balance: { decrement: parsed.data.amount } },
+      });
+
+      if (debited.count === 0) {
         throw new Error("Saldo seller tidak cukup untuk withdraw");
       }
 
-      const balanceAfter = balanceBefore - parsed.data.amount;
-
-      await tx.wallet.update({
-        where: { id: wallet.id },
-        data: { balance: new Prisma.Decimal(balanceAfter) },
-      });
+      const balanceAfter = Number(
+        (await tx.wallet.findUniqueOrThrow({ where: { id: wallet.id } })).balance
+      );
+      const balanceBefore = balanceAfter + parsed.data.amount;
 
       const request = await tx.sellerWithdrawalRequest.create({
         data: {
@@ -212,13 +217,15 @@ export async function POST(req: NextRequest) {
         const wallet = await tx.wallet.findUnique({ where: { userId: request.userId } });
         if (!wallet) return;
 
-        const balanceBefore = Number(wallet.balance);
-        const balanceAfter = balanceBefore + Number(request.amount);
-
-        await tx.wallet.update({
-          where: { id: wallet.id },
-          data: { balance: new Prisma.Decimal(balanceAfter) },
-        });
+        const balanceAfter = Number(
+          (
+            await tx.wallet.update({
+              where: { id: wallet.id },
+              data: { balance: { increment: request.amount } },
+            })
+          ).balance
+        );
+        const balanceBefore = balanceAfter - Number(request.amount);
 
         await tx.ledgerEntry.create({
           data: {

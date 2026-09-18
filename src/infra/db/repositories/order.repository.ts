@@ -247,29 +247,31 @@ export class OrderRepository {
   }
 
   /**
-   * Atomic HOLD: check & lock balance, create ledger entry, update wallet.balance
-   * Returns null if insufficient balance.
+   * HOLD: debits the balance only if it still covers the amount, as a single
+   * conditional UPDATE so simultaneous holds cannot each see the same starting
+   * balance and all succeed. Returns null if the balance is insufficient.
    */
   async holdWalletBalance(userId: string, amount: number, orderId: string) {
     return prisma.$transaction(async (tx) => {
       const wallet = await tx.wallet.findUnique({ where: { userId } });
       if (!wallet) throw new Error("Wallet not found");
-      if (Number(wallet.balance) < amount) return null;
 
-      const balanceBefore = Number(wallet.balance);
-      const balanceAfter = balanceBefore - amount;
-
-      await tx.wallet.update({
-        where: { userId },
-        data: { balance: balanceAfter },
+      const debited = await tx.wallet.updateMany({
+        where: { id: wallet.id, balance: { gte: amount } },
+        data: { balance: { decrement: amount } },
       });
+      if (debited.count === 0) return null;
+
+      const balanceAfter = Number(
+        (await tx.wallet.findUniqueOrThrow({ where: { id: wallet.id } })).balance
+      );
 
       await tx.ledgerEntry.create({
         data: {
           walletId: wallet.id,
           type: "HOLD",
           amount,
-          balanceBefore,
+          balanceBefore: balanceAfter + amount,
           balanceAfter,
           reference: orderId,
           description: `HOLD for order ${orderId}`,
@@ -303,13 +305,15 @@ export class OrderRepository {
       const wallet = await tx.wallet.findUnique({ where: { userId } });
       if (!wallet) return;
 
-      const balanceBefore = Number(wallet.balance);
-      const balanceAfter = balanceBefore + amount;
-
-      await tx.wallet.update({
-        where: { userId },
-        data: { balance: balanceAfter },
-      });
+      const balanceAfter = Number(
+        (
+          await tx.wallet.update({
+            where: { userId },
+            data: { balance: { increment: amount } },
+          })
+        ).balance
+      );
+      const balanceBefore = balanceAfter - amount;
 
       await tx.ledgerEntry.create({
         data: {
@@ -348,13 +352,15 @@ export class OrderRepository {
         return { duplicated: true, balanceAfter: Number(wallet.balance) };
       }
 
-      const balanceBefore = Number(wallet.balance);
-      const balanceAfter = balanceBefore + amount;
-
-      await tx.wallet.update({
-        where: { id: wallet.id },
-        data: { balance: balanceAfter },
-      });
+      const balanceAfter = Number(
+        (
+          await tx.wallet.update({
+            where: { id: wallet.id },
+            data: { balance: { increment: amount } },
+          })
+        ).balance
+      );
+      const balanceBefore = balanceAfter - amount;
 
       await tx.ledgerEntry.create({
         data: {
@@ -398,13 +404,15 @@ export class OrderRepository {
         });
       }
 
-      const balanceBefore = Number(wallet.balance);
-      const balanceAfter = balanceBefore + commissionAmount;
-
-      await tx.wallet.update({
-        where: { id: wallet.id },
-        data: { balance: balanceAfter },
-      });
+      const balanceAfter = Number(
+        (
+          await tx.wallet.update({
+            where: { id: wallet.id },
+            data: { balance: { increment: commissionAmount } },
+          })
+        ).balance
+      );
+      const balanceBefore = balanceAfter - commissionAmount;
 
       await tx.ledgerEntry.create({
         data: {

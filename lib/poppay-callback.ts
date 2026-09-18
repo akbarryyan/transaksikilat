@@ -248,13 +248,15 @@ async function handlePoppayWithdrawal(
       : null;
 
     if (wallet && !hasReleaseLedger && outcome.shouldRelease) {
-      const balanceBefore = Number(wallet.balance);
-      const balanceAfter = balanceBefore + Number(withdrawal.amount);
-
-      await tx.wallet.update({
-        where: { id: wallet.id },
-        data: { balance: balanceAfter },
-      });
+      const balanceAfter = Number(
+        (
+          await tx.wallet.update({
+            where: { id: wallet.id },
+            data: { balance: { increment: withdrawal.amount } },
+          })
+        ).balance
+      );
+      const balanceBefore = balanceAfter - Number(withdrawal.amount);
 
       await tx.ledgerEntry.create({
         data: {
@@ -333,35 +335,12 @@ async function handlePoppayTopup(
   }
 
   await prisma.$transaction(async (tx) => {
-    const wallet = await tx.wallet.upsert({
-      where: { userId: topup.userId },
-      create: { userId: topup.userId, balance: 0 },
-      update: {},
-    });
-
-    const balanceBefore = Number(wallet.balance);
-    const creditAmount = Number(topup.amount);
-    const balanceAfter = balanceBefore + creditAmount;
-
-    await tx.wallet.update({
-      where: { id: wallet.id },
-      data: { balance: balanceAfter },
-    });
-
-    await tx.ledgerEntry.create({
-      data: {
-        walletId: wallet.id,
-        type: "CREDIT",
-        amount: creditAmount,
-        balanceBefore,
-        balanceAfter,
-        reference: topup.topupCode,
-        description: "Top Up Saldo via POPPAY QRIS",
-      },
-    });
-
-    await tx.walletTopup.update({
-      where: { id: topup.id },
+    // Claiming the top-up is the idempotency gate: the status check above only
+    // catches deliveries that arrive one after another, so two arriving at once
+    // would both credit the wallet. Only the winner of this conditional update
+    // proceeds.
+    const claimed = await tx.walletTopup.updateMany({
+      where: { id: topup.id, status: { not: "COMPLETED" } },
       data: {
         status: "COMPLETED",
         paymentMethod: "qris",
@@ -369,6 +348,36 @@ async function handlePoppayTopup(
         paidAt,
         fee: Number(topup.fee ?? 0),
         totalPayment: Number(topup.totalPayment ?? topup.amount),
+      },
+    });
+
+    if (claimed.count === 0) return;
+
+    const wallet = await tx.wallet.upsert({
+      where: { userId: topup.userId },
+      create: { userId: topup.userId, balance: 0 },
+      update: {},
+    });
+
+    const creditAmount = Number(topup.amount);
+    const balanceAfter = Number(
+      (
+        await tx.wallet.update({
+          where: { id: wallet.id },
+          data: { balance: { increment: creditAmount } },
+        })
+      ).balance
+    );
+
+    await tx.ledgerEntry.create({
+      data: {
+        walletId: wallet.id,
+        type: "CREDIT",
+        amount: creditAmount,
+        balanceBefore: balanceAfter - creditAmount,
+        balanceAfter,
+        reference: topup.topupCode,
+        description: "Top Up Saldo via POPPAY QRIS",
       },
     });
   });

@@ -11,36 +11,46 @@ vi.mock("@/lib/session", () => ({
 
 import { prisma, resetDatabase } from "@/tests/helpers/db";
 import { POST as adminWalletPost } from "@/app/api/admin/wallet/route";
+import { OrderRepository } from "@/src/infra/db/repositories/order.repository";
 
-const CONCURRENT_CREDITS = 10;
-const CREDIT_AMOUNT = 1000;
+const CONCURRENCY = 10;
+const AMOUNT = 1000;
 
-async function createUserWithWallet(): Promise<string> {
+async function createUserWithWallet(balance: number): Promise<string> {
   const user = await prisma.user.create({
     data: {
-      email: `wallet-race-${Date.now()}@example.test`,
+      email: `wallet-race-${Date.now()}-${Math.random()}@example.test`,
       name: "Wallet Race Subject",
       role: "MEMBER",
-      wallet: { create: { balance: 0 } },
+      wallet: { create: { balance } },
     },
   });
   return user.id;
 }
 
-function creditRequest(userId: string): NextRequest {
+function walletRequest(body: Record<string, unknown>): NextRequest {
   return new NextRequest("http://localhost/api/admin/wallet", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      action: "CREDIT",
-      userId,
-      amount: CREDIT_AMOUNT,
-      description: "concurrency probe",
-    }),
+    body: JSON.stringify(body),
   });
 }
 
-describe("wallet balance under concurrent writes", () => {
+async function ledgerSum(userId: string, type: string): Promise<number> {
+  const wallet = await prisma.wallet.findUniqueOrThrow({ where: { userId } });
+  const result = await prisma.ledgerEntry.aggregate({
+    where: { walletId: wallet.id, type },
+    _sum: { amount: true },
+  });
+  return Number(result._sum.amount ?? 0);
+}
+
+async function balanceOf(userId: string): Promise<number> {
+  const wallet = await prisma.wallet.findUniqueOrThrow({ where: { userId } });
+  return Number(wallet.balance);
+}
+
+describe("wallet writes under concurrency", () => {
   beforeEach(async () => {
     await resetDatabase();
     sessionState.current = {
@@ -50,40 +60,74 @@ describe("wallet balance under concurrent writes", () => {
     };
   });
 
-  // KNOWN BUG — `it.fails` asserts this currently does NOT hold.
-  //
-  // Every wallet write in this codebase reads the balance, adds to it in JS,
-  // then writes an absolute value back. MySQL's REPEATABLE READ does not lock
-  // a row on a plain SELECT, so concurrent transactions all read the same
-  // starting balance and the last write wins. Observed here: all 10 credits
-  // returned HTTP 200 and wrote 10 ledger entries totalling 10000, while the
-  // balance moved by 1000 — 9000 lost, and the ledger no longer reconciles
-  // against the balance.
-  //
-  // Fixing it means atomic writes (`{ increment }`, plus a `balance >= amount`
-  // guard on debits) everywhere money touches a wallet. When that lands, this
-  // test starts passing and Vitest will flag the `.fails` — drop `.fails` then.
-  it.fails("keeps the balance consistent with the ledger when credits land at once", async () => {
-    const userId = await createUserWithWallet();
+  it("credits every rupiah when credits land at once", async () => {
+    const userId = await createUserWithWallet(0);
 
     const responses = await Promise.all(
-      Array.from({ length: CONCURRENT_CREDITS }, () =>
-        adminWalletPost(creditRequest(userId))
+      Array.from({ length: CONCURRENCY }, () =>
+        adminWalletPost(
+          walletRequest({ action: "CREDIT", userId, amount: AMOUNT })
+        )
       )
     );
 
     const accepted = responses.filter((response) => response.status === 200);
-    const wallet = await prisma.wallet.findUniqueOrThrow({ where: { userId } });
-    const ledgerTotal = await prisma.ledgerEntry.aggregate({
-      where: { walletId: wallet.id },
-      _sum: { amount: true },
-    });
+    const expected = CONCURRENCY * AMOUNT;
 
-    const expected = CONCURRENT_CREDITS * CREDIT_AMOUNT;
+    expect(accepted).toHaveLength(CONCURRENCY);
+    expect(await ledgerSum(userId, "CREDIT")).toBe(expected);
+    expect(await balanceOf(userId)).toBe(expected);
+  });
 
-    // Every credit was accepted, so every rupiah must be on the balance.
-    expect(accepted).toHaveLength(CONCURRENT_CREDITS);
-    expect(Number(ledgerTotal._sum.amount ?? 0)).toBe(expected);
-    expect(Number(wallet.balance)).toBe(expected);
+  it("lets only one of many simultaneous debits spend the last balance", async () => {
+    const userId = await createUserWithWallet(AMOUNT);
+
+    const responses = await Promise.all(
+      Array.from({ length: CONCURRENCY }, () =>
+        adminWalletPost(
+          walletRequest({ action: "DEBIT", userId, amount: AMOUNT })
+        )
+      )
+    );
+
+    const accepted = responses.filter((response) => response.status === 200);
+
+    // A wallet holding 1000 can fund exactly one debit of 1000.
+    expect(accepted).toHaveLength(1);
+    expect(await ledgerSum(userId, "DEBIT")).toBe(AMOUNT);
+    expect(await balanceOf(userId)).toBe(0);
+  });
+
+  it("lets only one of many simultaneous holds reserve the last balance", async () => {
+    const userId = await createUserWithWallet(AMOUNT);
+    const repository = new OrderRepository();
+
+    const results = await Promise.all(
+      Array.from({ length: CONCURRENCY }, (_, index) =>
+        repository.holdWalletBalance(userId, AMOUNT, `order-${index}`)
+      )
+    );
+
+    const held = results.filter((result) => result !== null);
+
+    expect(held).toHaveLength(1);
+    expect(await ledgerSum(userId, "HOLD")).toBe(AMOUNT);
+    expect(await balanceOf(userId)).toBe(0);
+  });
+
+  it("returns every released hold to the balance when releases land at once", async () => {
+    const userId = await createUserWithWallet(0);
+    const repository = new OrderRepository();
+
+    await Promise.all(
+      Array.from({ length: CONCURRENCY }, (_, index) =>
+        repository.releaseWalletHold(userId, AMOUNT, `order-${index}`)
+      )
+    );
+
+    const expected = CONCURRENCY * AMOUNT;
+
+    expect(await ledgerSum(userId, "RELEASE")).toBe(expected);
+    expect(await balanceOf(userId)).toBe(expected);
   });
 });

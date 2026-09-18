@@ -147,13 +147,15 @@ export async function PATCH(
 
         const wallet = await tx.wallet.findUnique({ where: { userId: request.userId } });
         if (wallet) {
-          const balanceBefore = Number(wallet.balance);
-          const balanceAfter = balanceBefore + Number(request.amount);
-
-          await tx.wallet.update({
-            where: { id: wallet.id },
-            data: { balance: new Prisma.Decimal(balanceAfter) },
-          });
+          const balanceAfter = Number(
+            (
+              await tx.wallet.update({
+                where: { id: wallet.id },
+                data: { balance: { increment: request.amount } },
+              })
+            ).balance
+          );
+          const balanceBefore = balanceAfter - Number(request.amount);
 
           await tx.ledgerEntry.create({
             data: {
