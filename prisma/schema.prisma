@@ -201,6 +201,7 @@ model Order {
   providerLogs   OrderProviderLog[]
 
   @@index([orderCode])
+  @@index([providerRef])
   @@index([userId, status])
   @@index([sellerId, status])
   @@index([sellerProductId])

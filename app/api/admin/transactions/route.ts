@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/src/infra/db/prisma";
 import { requireAdminSession } from "@/lib/admin";
+import {
+  PENDING_STATUSES,
+  UNPAGINATED_ROW_LIMIT,
+} from "@/lib/admin-transactions";
 
 export const dynamic = "force-dynamic";
 
@@ -69,16 +73,41 @@ export async function GET(request: Request) {
       },
     };
 
-    // Fetch with optional pagination
-    const [orders, total] = await Promise.all([
-      prisma.order.findMany({
-        where,
-        include,
-        orderBy: { createdAt: "desc" },
-        ...(usePagination ? { skip: (page - 1) * pageSize, take: pageSize } : {}),
-      }),
-      usePagination ? prisma.order.count({ where }) : Promise.resolve(0),
-    ]);
+    // Stats come from database aggregates over the whole filtered set, not
+    // from the rows returned. Counting the returned rows made every figure
+    // describe only the current page.
+    const [orders, statusGroups, methodGroups, revenue, guestCount] =
+      await Promise.all([
+        prisma.order.findMany({
+          where,
+          include,
+          orderBy: { createdAt: "desc" },
+          skip: usePagination ? (page - 1) * pageSize : 0,
+          take: usePagination ? pageSize : UNPAGINATED_ROW_LIMIT,
+        }),
+        prisma.order.groupBy({
+          by: ["status"],
+          where,
+          _count: { _all: true },
+        }),
+        prisma.order.groupBy({
+          by: ["paymentMethod"],
+          where,
+          _count: { _all: true },
+        }),
+        prisma.order.aggregate({
+          where: { AND: [where, { status: "SUCCESS" }] },
+          _sum: { amount: true },
+        }),
+        prisma.order.count({ where: { AND: [where, { userId: null }] } }),
+      ]);
+
+    const countByStatus = (statuses: string[]): number =>
+      statusGroups
+        .filter((group) => statuses.includes(group.status))
+        .reduce((sum, group) => sum + group._count._all, 0);
+
+    const total = statusGroups.reduce((sum, group) => sum + group._count._all, 0);
 
     const ordersData = orders.map((order) => ({
       id:            order.id,
@@ -99,23 +128,22 @@ export async function GET(request: Request) {
       updatedAt:     order.updatedAt.toISOString(),
     }));
 
+    const countByMethod = (method: string): number =>
+      methodGroups.find((group) => group.paymentMethod === method)?._count._all ?? 0;
+
     const stats = {
-      total:        usePagination ? total : ordersData.length,
-      success:      ordersData.filter((o) => o.status === "SUCCESS").length,
-      failed:       ordersData.filter((o) => o.status === "FAILED").length,
-      pending:      ordersData.filter((o) =>
-        ["CREATED", "WAITING_PAYMENT", "PAID", "PROCESSING_PROVIDER"].includes(o.status)
-      ).length,
-      totalRevenue: ordersData
-        .filter((o) => o.status === "SUCCESS")
-        .reduce((sum, o) => sum + o.amount, 0),
+      total,
+      success:      countByStatus(["SUCCESS"]),
+      failed:       countByStatus(["FAILED"]),
+      pending:      countByStatus(PENDING_STATUSES),
+      totalRevenue: Number(revenue._sum.amount ?? 0),
       byPaymentMethod: {
-        wallet:  ordersData.filter((o) => o.paymentMethod === "WALLET").length,
-        gateway: ordersData.filter((o) => o.paymentMethod === "PAYMENT_GATEWAY").length,
+        wallet:  countByMethod("WALLET"),
+        gateway: countByMethod("PAYMENT_GATEWAY"),
       },
       byUserType: {
-        guest:  ordersData.filter((o) => !o.userId).length,
-        member: ordersData.filter((o) =>  o.userId).length,
+        guest:  guestCount,
+        member: total - guestCount,
       },
     };
 
@@ -123,7 +151,9 @@ export async function GET(request: Request) {
       success: true,
       data:    ordersData,
       stats,
-      ...(usePagination ? { total, page, pageSize, totalPages: Math.ceil(total / pageSize) } : {}),
+      ...(usePagination
+        ? { total, page, pageSize, totalPages: Math.ceil(total / pageSize) }
+        : { total, truncated: total > UNPAGINATED_ROW_LIMIT }),
     });
   } catch (error) {
     console.error("Failed to get transactions:", error);
