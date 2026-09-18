@@ -227,13 +227,31 @@ async function handlePoppayWithdrawal(
   }
 
   await prisma.$transaction(async (tx) => {
-    const current = await tx.sellerWithdrawalRequest.findUnique({
-      where: { id: withdrawal.id },
+    // Claiming the request is the idempotency gate. Reading the status and then
+    // acting on it lets two callbacks for the same payout both see APPROVED and
+    // both hand the money back, returning twice what was held. Only the
+    // transaction that wins this conditional update may release.
+    const claimed = await tx.sellerWithdrawalRequest.updateMany({
+      where: {
+        id: withdrawal.id,
+        status: { notIn: ["REJECTED", "CANCELLED", "PAID"] },
+      },
+      data: {
+        status: outcome.requestStatus,
+        payoutRefId: payload.refid,
+        payoutAggRefId: payload.agg_refid,
+        payoutRawPayload: rawPayloadJson(payload),
+        processedNote:
+          outcome.kind === "REJECTED"
+            ? "Poppay callback status=1 (Reject)."
+            : outcome.kind === "CANCELLED"
+            ? "Poppay callback status=2 (Cancel)."
+            : "Poppay callback status=3 (Expired).",
+        processedAt: new Date(),
+      },
     });
 
-    if (!current || current.status === "REJECTED" || current.status === "CANCELLED") {
-      return;
-    }
+    if (claimed.count === 0) return;
 
     const wallet = await tx.wallet.findUnique({ where: { userId: withdrawal.userId } });
     const hasReleaseLedger = wallet
@@ -270,23 +288,6 @@ async function handlePoppayWithdrawal(
         },
       });
     }
-
-    await tx.sellerWithdrawalRequest.update({
-      where: { id: withdrawal.id },
-      data: {
-        status: outcome.requestStatus,
-        payoutRefId: payload.refid,
-        payoutAggRefId: payload.agg_refid,
-        payoutRawPayload: rawPayloadJson(payload),
-        processedNote:
-          outcome.kind === "REJECTED"
-            ? "Poppay callback status=1 (Reject)."
-            : outcome.kind === "CANCELLED"
-            ? "Poppay callback status=2 (Cancel)."
-            : "Poppay callback status=3 (Expired).",
-        processedAt: new Date(),
-      },
-    });
   });
 
   return { action: outcome.action, withdrawalId: withdrawal.id };
