@@ -251,7 +251,7 @@ export default function SellerStorefrontPage({
                         <span className="rounded-full bg-slate-100 px-2 py-1 text-[9px] font-semibold uppercase tracking-wide text-slate-500 lg:bg-white/10 lg:text-slate-500">
                           {item.product.category}
                         </span>
-                        <span className="text-[13px] font-bold text-emerald-600 lg:text-emerald-300">{rupiah(item.sellingPrice)}</span>
+                        <span className="text-[13px] font-bold text-emerald-600">{rupiah(item.sellingPrice)}</span>
                       </div>
                     </div>
                   </button>

@@ -272,30 +272,30 @@ function TopupStatusPageContent({
 
               <div className="w-full rounded-2xl border border-emerald-100 bg-emerald-50 p-5 text-left space-y-3 lg:border-emerald-500/20 lg:bg-emerald-500/10">
                 <div className="flex justify-between text-sm">
-                    <span className="text-slate-500 lg:text-emerald-100/80">Nominal Top Up</span>
+                    <span className="text-slate-500">Nominal Top Up</span>
                     <span className="font-bold text-slate-800 lg:text-slate-800">{formatRp(topup.amount)}</span>
                 </div>
                 {topup.fee > 0 && (
                   <div className="flex justify-between text-sm">
-                    <span className="text-slate-500 lg:text-emerald-100/80">Biaya Admin</span>
-                    <span className="font-semibold text-slate-600 lg:text-emerald-50">{formatRp(topup.fee)}</span>
+                    <span className="text-slate-500">Biaya Admin</span>
+                    <span className="font-semibold text-slate-600">{formatRp(topup.fee)}</span>
                   </div>
                 )}
                 {topup.paymentMethod && (
                   <div className="flex justify-between text-sm">
-                    <span className="text-slate-500 lg:text-emerald-100/80">Metode</span>
-                    <span className="font-semibold uppercase text-slate-700 lg:text-emerald-50">{topup.paymentMethod.replace(/_/g, " ")}</span>
+                    <span className="text-slate-500">Metode</span>
+                    <span className="font-semibold uppercase text-slate-700">{topup.paymentMethod.replace(/_/g, " ")}</span>
                   </div>
                 )}
                 {topup.paidAt && (
                   <div className="flex justify-between text-sm">
-                    <span className="text-slate-500 lg:text-emerald-100/80">Waktu Bayar</span>
-                    <span className="font-semibold text-slate-700 lg:text-emerald-50">{formatDateTime(topup.paidAt)}</span>
+                    <span className="text-slate-500">Waktu Bayar</span>
+                    <span className="font-semibold text-slate-700">{formatDateTime(topup.paidAt)}</span>
                   </div>
                 )}
                 {walletBalance !== null && (
                   <div className="flex justify-between border-t border-emerald-100 pt-3 text-sm lg:border-emerald-500/20">
-                    <span className="text-slate-500 lg:text-emerald-100/80">Saldo Sekarang</span>
+                    <span className="text-slate-500">Saldo Sekarang</span>
                     <span className="font-bold text-emerald-600">{formatRp(walletBalance)}</span>
                   </div>
                 )}

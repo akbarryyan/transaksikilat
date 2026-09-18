@@ -429,8 +429,8 @@ function OrderDetailPageContent() {
                 </svg>
               </div>
               <div>
-                <p className="text-sm font-bold text-teal-800 lg:text-teal-50">Dana Sudah Dikembalikan</p>
-                <p className="text-[11px] text-teal-700 lg:text-teal-100/80">
+                <p className="text-sm font-bold text-teal-800">Dana Sudah Dikembalikan</p>
+                <p className="text-[11px] text-teal-700">
                   {order.notes ?? "Dana otomatis sudah masuk kembali ke saldo akun kamu."}
                 </p>
               </div>
@@ -446,8 +446,8 @@ function OrderDetailPageContent() {
                 </svg>
               </div>
               <div>
-                <p className="text-sm font-bold text-orange-800 lg:text-orange-50">Pesanan Kedaluwarsa</p>
-                <p className="text-[11px] text-orange-600 lg:text-orange-100/80">Waktu pembayaran habis. Silakan buat pesanan baru.</p>
+                <p className="text-sm font-bold text-orange-800">Pesanan Kedaluwarsa</p>
+                <p className="text-[11px] text-orange-600">Waktu pembayaran habis. Silakan buat pesanan baru.</p>
               </div>
             </div>
           )}

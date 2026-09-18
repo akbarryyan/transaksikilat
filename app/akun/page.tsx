@@ -511,7 +511,7 @@ export default function AkunPage() {
             <button
               onClick={() => openModal("logout-confirm")}
               disabled={isLoggingOut}
-              className="flex w-full items-center justify-center gap-2.5 rounded-2xl border border-rose-100 bg-rose-50 py-4 text-sm font-semibold text-rose-500 transition hover:bg-rose-100 active:bg-rose-200 disabled:opacity-60 lg:border-rose-500/20 lg:bg-rose-500/10 lg:text-rose-100 lg:hover:bg-rose-500/15"
+              className="flex w-full items-center justify-center gap-2.5 rounded-2xl border border-rose-100 bg-rose-50 py-4 text-sm font-semibold text-rose-500 transition hover:bg-rose-100 active:bg-rose-200 disabled:opacity-60 lg:border-rose-500/20 lg:bg-rose-500/10 lg:hover:bg-rose-500/15"
             >
               {isLoggingOut ? (
                 <>

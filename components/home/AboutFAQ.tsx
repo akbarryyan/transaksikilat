@@ -57,7 +57,7 @@ export default function AboutFAQ() {
       <div className="space-y-5 lg:grid lg:grid-cols-[0.92fr_1.08fr] lg:gap-6 lg:space-y-0">
         <div className="rounded-2xl bg-white p-6 shadow-sm lg:rounded-[28px] lg:border lg:border-slate-200 lg:bg-white lg:p-8 lg:shadow-none">
           <div className="mb-5">
-            <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#003D99] lg:text-blue-200">Tentang Kami</p>
+            <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#003D99]">Tentang Kami</p>
             <h2 className="mt-2 text-xl font-bold text-slate-900 lg:text-[28px] lg:text-slate-800">Layanan digital untuk kebutuhan top up dan PPOB</h2>
           </div>
 
@@ -87,7 +87,7 @@ export default function AboutFAQ() {
           <div className="rounded-2xl bg-white p-6 shadow-sm lg:rounded-[28px] lg:border lg:border-slate-200 lg:bg-white lg:p-8 lg:shadow-none">
             <div className="mb-6 flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
               <div>
-                <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#003D99] lg:text-blue-200">FAQ</p>
+                <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#003D99]">FAQ</p>
                 <h2 className="mt-2 text-xl font-bold text-slate-900 lg:text-[28px] lg:text-slate-800">Paling Sering Ditanyakan</h2>
               </div>
               <p className="max-w-md text-sm text-slate-500 lg:text-right lg:text-slate-500">
@@ -104,7 +104,7 @@ export default function AboutFAQ() {
                   >
                     <span className="pr-4 text-[12px] font-semibold text-purple-600 lg:text-[13px] lg:text-slate-800">{faq.question}</span>
                     <svg
-                      className={`h-5 w-5 flex-shrink-0 text-purple-600 transition-transform duration-300 lg:text-blue-200 ${
+                      className={`h-5 w-5 flex-shrink-0 text-purple-600 transition-transform duration-300 ${
                         openFaq === idx ? "rotate-180" : ""
                       }`}
                       fill="none"

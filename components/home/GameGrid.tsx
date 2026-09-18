@@ -136,7 +136,7 @@ export default function GameGrid({ category }: GameGridProps) {
         {brands.length > 12 && (
           <button
             onClick={() => setShowAll((v) => !v)}
-            className="text-sm font-semibold text-purple-600 lg:text-blue-200"
+            className="text-sm font-semibold text-purple-600"
           >
             {showAll ? "Sembunyikan" : `Lihat Semua (${brands.length})`} →
           </button>

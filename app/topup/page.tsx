@@ -289,7 +289,7 @@ export default function TopupPage() {
                   <svg className="w-4 h-4 text-rose-400 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
                     <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/>
                   </svg>
-                  <p className="text-sm text-rose-600 lg:text-rose-100">{errorMsg}</p>
+                  <p className="text-sm text-rose-600">{errorMsg}</p>
                 </div>
               )}
 

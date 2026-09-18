@@ -106,7 +106,7 @@ export default function PageFooter() {
               <p className="text-[11px] font-bold text-slate-700 mb-1 lg:text-slate-700">{column.title}</p>
               <div className="flex flex-col gap-1">
                 {column.links.map((link) => (
-                  <a key={`${column.title}-${link.label}-${link.href}`} href={link.href} className="text-[12px] font-semibold text-[#6A7389] transition-colors hover:text-slate-700 lg:text-slate-500 lg:hover:text-white">
+                  <a key={`${column.title}-${link.label}-${link.href}`} href={link.href} className="text-[12px] font-semibold text-[#6A7389] transition-colors hover:text-slate-700 lg:text-slate-500">
                     {link.label}
                   </a>
                 ))}
@@ -123,9 +123,9 @@ export default function PageFooter() {
         </div>
         <div className="flex-1 min-w-0">
           <p className="mb-0.5 text-[11px] leading-none text-slate-500 lg:text-slate-400">Punya Pertanyaan?</p>
-          <p className="text-[12px] font-semibold text-[#003D99] lg:text-blue-300">
+          <p className="text-[12px] font-semibold text-[#003D99]">
             Cek Pusat Bantuan{" "}
-            <span className="text-[#003D99] lg:text-blue-300">&rsaquo;</span>
+            <span className="text-[#003D99]">&rsaquo;</span>
           </p>
         </div>
       </a>

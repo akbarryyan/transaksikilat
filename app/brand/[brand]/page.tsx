@@ -669,15 +669,15 @@ export default function BrandDetailPage({
 
             {sellerStore && (
               <div className="mb-3 rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3 lg:mb-4 lg:border-emerald-500/20 lg:bg-emerald-500/10 lg:px-5 lg:py-4">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-emerald-700 lg:text-[10px] lg:tracking-[0.28em] lg:text-emerald-200">Toko Merchant</p>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-emerald-700 lg:text-[10px] lg:tracking-[0.28em]">Toko Merchant</p>
                 <p className="mt-1 text-sm font-bold text-slate-900 lg:mt-1.5 lg:text-base lg:text-slate-800">{sellerStore.displayName}</p>
                 {sellerStore.description && (
-                  <p className="mt-1 text-xs text-slate-600 lg:mt-1.5 lg:max-w-3xl lg:text-[12px] lg:leading-5 lg:text-emerald-50/80">{sellerStore.description}</p>
+                  <p className="mt-1 text-xs text-slate-600 lg:mt-1.5 lg:max-w-3xl lg:text-[12px] lg:leading-5">{sellerStore.description}</p>
                 )}
                 <button
                   type="button"
                   onClick={() => router.push(`/seller/${sellerStore.slug}`)}
-                  className="mt-2 text-xs font-semibold text-emerald-700 hover:text-emerald-800 lg:text-emerald-200 lg:hover:text-white"
+                  className="mt-2 text-xs font-semibold text-emerald-700 hover:text-emerald-800"
                 >
                   Kembali ke storefront merchant
                 </button>
@@ -751,7 +751,7 @@ export default function BrandDetailPage({
                   setReviewSubmitSuccess(false);
                   setShowReviewSheet(true);
                 }}
-                className="flex items-center gap-1 text-[11px] font-semibold text-purple-600 transition-colors hover:text-purple-800 lg:gap-1.5 lg:text-[12px] lg:text-slate-600 lg:hover:text-white"
+                className="flex items-center gap-1 text-[11px] font-semibold text-purple-600 transition-colors hover:text-purple-800 lg:gap-1.5 lg:text-[12px] lg:text-slate-600"
               >
                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
@@ -808,7 +808,7 @@ export default function BrandDetailPage({
               </div>
               <div className="flex-1 min-w-0">
                 {/* Title */}
-                <p className="mb-1.5 cursor-pointer text-[12px] font-bold text-blue-700 underline underline-offset-2 lg:mb-2 lg:text-[13px] lg:text-blue-100">
+                <p className="mb-1.5 cursor-pointer text-[12px] font-bold text-blue-700 underline underline-offset-2 lg:mb-2 lg:text-[13px]">
                   Cara Top Up {brandName} Murah
                 </p>
                 {/* Steps */}
@@ -833,11 +833,11 @@ export default function BrandDetailPage({
 
                 {/* Promo / description teaser */}
                 <div className="mt-3">
-                  <p className="mb-0.5 text-[11px] font-bold text-blue-700 lg:mb-1 lg:text-[12px] lg:text-blue-100">
+                  <p className="mb-0.5 text-[11px] font-bold text-blue-700 lg:mb-1 lg:text-[12px]">
                     Top Up {brandName} Murah Bayar Pakai ShopeePay
                   </p>
                   <p
-                    className={`text-[11px] leading-relaxed uppercase font-semibold text-blue-800 lg:text-[12px] lg:leading-6 lg:text-blue-50 ${
+                    className={`text-[11px] leading-relaxed uppercase font-semibold text-blue-800 lg:text-[12px] lg:leading-6 ${
                       showDescription ? "" : "line-clamp-2"
                     }`}
                   >
@@ -847,7 +847,7 @@ export default function BrandDetailPage({
                   </p>
                   <button
                     onClick={() => setShowDescription((v) => !v)}
-                    className="mt-1.5 flex items-center gap-1 text-[11px] font-semibold text-blue-600 transition-colors hover:text-blue-800 lg:text-blue-100 lg:hover:text-white"
+                    className="mt-1.5 flex items-center gap-1 text-[11px] font-semibold text-blue-600 transition-colors hover:text-blue-800"
                   >
                     {showDescription ? "Sembunyikan" : "Baca Selengkapnya"}
                     <svg
@@ -911,7 +911,7 @@ export default function BrandDetailPage({
                 className={`flex-shrink-0 px-4 py-2 rounded-full text-xs font-semibold transition-all lg:px-5 lg:py-2.5 lg:text-[12px] ${
                   activeType === "Semua"
                     ? "bg-purple-600 text-white shadow-md shadow-purple-200"
-                    : "bg-white text-slate-600 border border-slate-200 hover:border-purple-300 hover:text-purple-600 lg:border-slate-200 lg:bg-white lg:text-slate-600 lg:hover:text-white"
+                    : "bg-white text-slate-600 border border-slate-200 hover:border-purple-300 hover:text-purple-600 lg:border-slate-200 lg:bg-white lg:text-slate-600"
                 }`}
               >
                 Semua
@@ -927,7 +927,7 @@ export default function BrandDetailPage({
                     className={`flex-shrink-0 px-4 py-2 rounded-full text-xs font-semibold transition-all whitespace-nowrap lg:px-5 lg:py-2.5 lg:text-[12px] ${
                       activeType === type
                         ? "bg-purple-600 text-white shadow-md shadow-purple-200"
-                        : "bg-white text-slate-600 border border-slate-200 hover:border-purple-300 hover:text-purple-600 lg:border-slate-200 lg:bg-white lg:text-slate-600 lg:hover:text-white"
+                        : "bg-white text-slate-600 border border-slate-200 hover:border-purple-300 hover:text-purple-600 lg:border-slate-200 lg:bg-white lg:text-slate-600"
                     }`}
                   >
                     {label}
@@ -1363,7 +1363,7 @@ export default function BrandDetailPage({
               <div className="w-4 h-4 rounded-full border-2 border-blue-400 flex items-center justify-center flex-shrink-0 mt-0.5 lg:border-blue-300">
                 <span className="text-blue-500 text-[9px] font-bold">i</span>
               </div>
-              <p className="text-[11px] text-blue-700 leading-relaxed lg:text-blue-100">
+              <p className="text-[11px] text-blue-700 leading-relaxed">
                 Biaya Total belanja adalah jumlah dari total pembelian, biaya layanan fitur, dan biaya admin pembayaran
               </p>
             </div>
@@ -1510,7 +1510,7 @@ export default function BrandDetailPage({
             {/* Header */}
             <div className="flex items-center justify-between px-5 py-3 flex-shrink-0 border-b border-slate-100 lg:border-slate-200">
               <div>
-                <p className="text-[14px] font-bold text-orange-600 lg:text-orange-300">Voucher Saya</p>
+                <p className="text-[14px] font-bold text-orange-600">Voucher Saya</p>
                 <p className="text-[11px] text-slate-400">{claimedVouchers.length} voucher dapat digunakan</p>
               </div>
               <button
@@ -1530,7 +1530,7 @@ export default function BrandDetailPage({
               {claimedVouchers.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-10 text-center">
                   <div className="w-12 h-12 rounded-full bg-orange-100 flex items-center justify-center mb-3 lg:bg-orange-500/15">
-                    <svg className="w-6 h-6 text-orange-400 lg:text-orange-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-6 h-6 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 5v2m0 4v2m0 4v2M5 5a2 2 0 00-2 2v3a2 2 0 110 4v3a2 2 0 002 2h14a2 2 0 002-2v-3a2 2 0 110-4V7a2 2 0 00-2-2H5z" />
                     </svg>
                   </div>
@@ -1739,7 +1739,7 @@ export default function BrandDetailPage({
                 <div className="w-4 h-4 rounded-full border-2 border-amber-500 flex items-center justify-center flex-shrink-0 mt-0.5 lg:border-amber-300">
                   <span className="text-amber-600 text-[9px] font-bold">i</span>
                 </div>
-                <p className="text-[11px] text-amber-700 leading-relaxed lg:text-amber-100">
+                <p className="text-[11px] text-amber-700 leading-relaxed">
                   Ulasan akan tampil setelah disetujui admin. Terima kasih telah berbagi pengalaman!
                 </p>
               </div>
