@@ -3,6 +3,13 @@ import bcrypt from "bcryptjs";
 import { getSession } from "@/lib/session";
 import { prisma } from "@/src/infra/db/prisma";
 import { normalizePhone, isValidPhone } from "@/lib/fonnte";
+import {
+  clearFailedLogins,
+  clientIpFromHeaders,
+  isLoginThrottled,
+  LOGIN_THROTTLE_MESSAGE,
+  recordFailedLogin,
+} from "@/lib/login-rate-limit";
 
 export async function POST(req: NextRequest) {
   try {
@@ -85,7 +92,21 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    const throttleKey =
+      method === "email"
+        ? identifier.toLowerCase().trim()
+        : normalizePhone(identifier);
+    const clientIp = clientIpFromHeaders(req.headers);
+
+    if (await isLoginThrottled(throttleKey, clientIp)) {
+      return NextResponse.json(
+        { success: false, message: LOGIN_THROTTLE_MESSAGE },
+        { status: 429 }
+      );
+    }
+
     if (!user || !user.passwordHash) {
+      await recordFailedLogin(throttleKey, clientIp);
       return NextResponse.json(
         {
           success: false,
@@ -108,6 +129,7 @@ export async function POST(req: NextRequest) {
     // --- Verifikasi password ---
     const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
     if (!isPasswordValid) {
+      await recordFailedLogin(throttleKey, clientIp);
       return NextResponse.json(
         {
           success: false,
@@ -119,6 +141,8 @@ export async function POST(req: NextRequest) {
         { status: 401 }
       );
     }
+
+    await clearFailedLogins(throttleKey);
 
     // Login selalu langsung tanpa OTP
     const session = await getSession();

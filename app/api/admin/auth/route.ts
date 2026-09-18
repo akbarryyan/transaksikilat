@@ -1,6 +1,13 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
 import { prisma } from "@/src/infra/db/prisma";
+import {
+  clearFailedLogins,
+  clientIpFromHeaders,
+  isLoginThrottled,
+  LOGIN_THROTTLE_MESSAGE,
+  recordFailedLogin,
+} from "@/lib/login-rate-limit";
 
 export const dynamic = "force-dynamic";
 
@@ -53,6 +60,16 @@ export async function POST(req: Request) {
       );
     }
 
+    const throttleKey = String(email).toLowerCase().trim();
+    const clientIp = clientIpFromHeaders(req.headers);
+
+    if (await isLoginThrottled(throttleKey, clientIp)) {
+      return NextResponse.json(
+        { success: false, message: LOGIN_THROTTLE_MESSAGE },
+        { status: 429 }
+      );
+    }
+
     const { default: bcrypt } = await import("bcryptjs");
 
     const user = await prisma.user.findUnique({
@@ -68,6 +85,7 @@ export async function POST(req: Request) {
     });
 
     if (!user || !user.passwordHash) {
+      await recordFailedLogin(throttleKey, clientIp);
       return NextResponse.json(
         { success: false, message: "Email atau password salah." },
         { status: 401 }
@@ -82,6 +100,7 @@ export async function POST(req: Request) {
     }
 
     if (user.role !== "ADMIN") {
+      await recordFailedLogin(throttleKey, clientIp);
       return NextResponse.json(
         { success: false, message: "Akun bukan admin." },
         { status: 403 }
@@ -90,11 +109,14 @@ export async function POST(req: Request) {
 
     const valid = await bcrypt.compare(password, user.passwordHash);
     if (!valid) {
+      await recordFailedLogin(throttleKey, clientIp);
       return NextResponse.json(
         { success: false, message: "Email atau password salah." },
         { status: 401 }
       );
     }
+
+    await clearFailedLogins(throttleKey);
 
     // Set session
     const session = await getSession();

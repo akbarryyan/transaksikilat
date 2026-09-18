@@ -599,3 +599,18 @@ model OtpCode {
   @@index([email, purpose, createdAt])
   @@map("otp_codes")
 }
+
+// ============================================
+// FAILED LOGIN ATTEMPTS (brute-force throttling)
+// ============================================
+
+model FailedLoginAttempt {
+  id         String   @id @default(cuid())
+  identifier String   @db.VarChar(255) // normalized email or phone that was tried
+  ip         String?  @db.VarChar(64)
+  createdAt  DateTime @default(now())
+
+  @@index([identifier, createdAt])
+  @@index([ip, createdAt])
+  @@map("failed_login_attempts")
+}
