@@ -35,7 +35,12 @@ export async function GET(request: Request) {
     const pageSizeParam = searchParams.get("pageSize");
     const usePagination = pageParam !== null;
     const page          = Math.max(1, parseInt(pageParam     ?? "1",  10));
-    const pageSize      = Math.max(1, parseInt(pageSizeParam ?? "10", 10));
+    // Clamped: without an upper bound, ?pageSize=999999 walks straight past the
+    // cap that keeps this query from selecting the whole table.
+    const pageSize      = Math.min(
+      UNPAGINATED_ROW_LIMIT,
+      Math.max(1, parseInt(pageSizeParam ?? "10", 10))
+    );
 
     // Build where clause
     const where: any = {};

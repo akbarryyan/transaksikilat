@@ -75,6 +75,34 @@ describe("admin transactions listing", () => {
     expect(body.stats.totalRevenue).toBe(7 * AMOUNT);
   });
 
+  it("serves distinct rows per page and reports how many pages there are", async () => {
+    await seedOrders(Array(25).fill("SUCCESS"));
+
+    const first = await fetchTransactions("?page=1&pageSize=20");
+    const second = await fetchTransactions("?page=2&pageSize=20");
+
+    expect(first.data).toHaveLength(20);
+    expect(second.data).toHaveLength(5);
+    expect(first.totalPages).toBe(2);
+    expect(first.total).toBe(25);
+
+    // A page must not repeat rows already shown on the previous one.
+    const firstIds = new Set(first.data.map((o: { id: string }) => o.id));
+    const overlap = second.data.filter((o: { id: string }) => firstIds.has(o.id));
+    expect(overlap).toHaveLength(0);
+  });
+
+  it("clamps an oversized pageSize to the same cap", async () => {
+    const count = UNPAGINATED_ROW_LIMIT + 5;
+    await seedOrders(Array(count).fill("SUCCESS"));
+
+    const body = await fetchTransactions("?page=1&pageSize=999999");
+
+    // Otherwise a caller walks straight past the unpaginated cap.
+    expect(body.data).toHaveLength(UNPAGINATED_ROW_LIMIT);
+    expect(body.stats.total).toBe(count);
+  });
+
   it("caps how many rows an unpaginated request can pull", async () => {
     const count = UNPAGINATED_ROW_LIMIT + 1;
     await seedOrders(Array(count).fill("SUCCESS"));

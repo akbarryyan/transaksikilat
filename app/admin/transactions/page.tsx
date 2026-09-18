@@ -94,6 +94,8 @@ export default function TransactionsPage() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
   const [filters, setFilters] = useState<FilterState>({
     status: "",
     paymentMethod: "",
@@ -109,16 +111,22 @@ export default function TransactionsPage() {
   const itemsPerPage = 20;
   const toast = useToast();
 
+  // Paging happens on the server: fetching every order just to slice it in the
+  // browser got slower with each order placed, and the endpoint caps an
+  // unpaginated request at 500 rows, which would silently hide the rest.
   useEffect(() => {
     loadTransactions();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentPage, filters]);
 
   const loadTransactions = async () => {
     try {
       setLoading(true);
-      
+
       // Build query params
       const params = new URLSearchParams();
+      params.append("page", String(currentPage));
+      params.append("pageSize", String(itemsPerPage));
       if (filters.status) params.append("status", filters.status);
       if (filters.paymentMethod) params.append("paymentMethod", filters.paymentMethod);
       if (filters.userType) params.append("userType", filters.userType);
@@ -131,6 +139,8 @@ export default function TransactionsPage() {
         const data = await response.json();
         setTransactions(data.data || []);
         setStats(data.stats);
+        setTotalPages(data.totalPages ?? 1);
+        setTotalCount(data.total ?? 0);
       }
     } catch (error) {
       console.error("Failed to load transactions:", error);
@@ -138,6 +148,11 @@ export default function TransactionsPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const updateFilter = (patch: Partial<FilterState>) => {
+    setFilters((prev) => ({ ...prev, ...patch }));
+    setCurrentPage(1);
   };
 
   const loadTransactionDetail = async (id: string) => {
@@ -157,17 +172,10 @@ export default function TransactionsPage() {
     }
   };
 
-  const filteredTransactions = transactions;
-
-  // Pagination
-  const totalPages = Math.ceil(filteredTransactions.length / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const endIndex = startIndex + itemsPerPage;
-  const currentTransactions = filteredTransactions.slice(startIndex, endIndex);
-
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [filters]);
+  // The server already returns just this page.
+  const currentTransactions = transactions;
+  const rangeStart = totalCount === 0 ? 0 : (currentPage - 1) * itemsPerPage + 1;
+  const rangeEnd = Math.min(currentPage * itemsPerPage, totalCount);
 
   const goToPage = (page: number) => {
     setCurrentPage(page);
@@ -206,6 +214,7 @@ export default function TransactionsPage() {
   };
 
   const clearFilters = () => {
+    setCurrentPage(1);
     setFilters({
       status: "",
       paymentMethod: "",
@@ -391,7 +400,7 @@ export default function TransactionsPage() {
                 <input
                   type="text"
                   value={filters.search}
-                  onChange={(e) => setFilters((prev) => ({ ...prev, search: e.target.value }))}
+                  onChange={(e) => updateFilter({ search: e.target.value })}
                   placeholder="Order code, customer, target..."
                   className="mt-1 w-full rounded-xl border border-slate-200 px-4 py-2 text-slate-800 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
                 />
@@ -401,7 +410,7 @@ export default function TransactionsPage() {
                 <label className="block text-sm font-medium text-slate-700">Status</label>
                 <select
                   value={filters.status}
-                  onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value }))}
+                  onChange={(e) => updateFilter({ status: e.target.value })}
                   className="mt-1 w-full rounded-xl border border-slate-200 px-4 py-2 text-slate-800 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
                 >
                   <option value="">Semua Status</option>
@@ -419,7 +428,7 @@ export default function TransactionsPage() {
                 <label className="block text-sm font-medium text-slate-700">Metode Bayar</label>
                 <select
                   value={filters.paymentMethod}
-                  onChange={(e) => setFilters((prev) => ({ ...prev, paymentMethod: e.target.value }))}
+                  onChange={(e) => updateFilter({ paymentMethod: e.target.value })}
                   className="mt-1 w-full rounded-xl border border-slate-200 px-4 py-2 text-slate-800 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
                 >
                   <option value="">Semua Metode</option>
@@ -432,7 +441,7 @@ export default function TransactionsPage() {
                 <label className="block text-sm font-medium text-slate-700">Tipe User</label>
                 <select
                   value={filters.userType}
-                  onChange={(e) => setFilters((prev) => ({ ...prev, userType: e.target.value }))}
+                  onChange={(e) => updateFilter({ userType: e.target.value })}
                   className="mt-1 w-full rounded-xl border border-slate-200 px-4 py-2 text-slate-800 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
                 >
                   <option value="">Semua Tipe</option>
@@ -446,7 +455,7 @@ export default function TransactionsPage() {
                 <input
                   type="date"
                   value={filters.dateFrom}
-                  onChange={(e) => setFilters((prev) => ({ ...prev, dateFrom: e.target.value }))}
+                  onChange={(e) => updateFilter({ dateFrom: e.target.value })}
                   className="mt-1 w-full rounded-xl border border-slate-200 px-4 py-2 text-slate-800 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
                 />
               </div>
@@ -456,7 +465,7 @@ export default function TransactionsPage() {
                 <input
                   type="date"
                   value={filters.dateTo}
-                  onChange={(e) => setFilters((prev) => ({ ...prev, dateTo: e.target.value }))}
+                  onChange={(e) => updateFilter({ dateTo: e.target.value })}
                   className="mt-1 w-full rounded-xl border border-slate-200 px-4 py-2 text-slate-800 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
                 />
               </div>
@@ -478,7 +487,7 @@ export default function TransactionsPage() {
               <div>
                 <h2 className="text-lg font-semibold text-slate-800">Daftar Transaksi</h2>
                 <p className="mt-1 text-sm text-slate-400">
-                  {filteredTransactions.length} transaksi ditemukan
+                  {totalCount} transaksi ditemukan
                 </p>
               </div>
             </div>
@@ -639,10 +648,10 @@ export default function TransactionsPage() {
                   </table>
                 </div>
 
-                {filteredTransactions.length > 0 && (
+                {totalCount > 0 && (
                   <div className="mt-6 flex flex-col items-center justify-between gap-4 sm:flex-row">
                     <p className="text-sm text-slate-600">
-                      Menampilkan {startIndex + 1} - {Math.min(endIndex, filteredTransactions.length)} dari {filteredTransactions.length} transaksi
+                      Menampilkan {rangeStart} - {rangeEnd} dari {totalCount} transaksi
                     </p>
                     {totalPages > 1 && (
                       <div className="flex items-center gap-2">
@@ -690,7 +699,7 @@ export default function TransactionsPage() {
                   </div>
                 )}
 
-                {filteredTransactions.length === 0 && (
+                {totalCount === 0 && (
                   <div className="py-12 text-center">
                     <div className="text-6xl">💳</div>
                     <p className="mt-4 text-lg font-medium text-slate-600">
