@@ -5,6 +5,7 @@
  * Token priority: SiteConfig DB (key: "FONNTE_TOKEN") → .env FONNTE_TOKEN
  */
 
+import { randomInt } from "crypto";
 import { getSiteConfig } from "@/lib/site-config";
 
 /**
@@ -65,7 +66,9 @@ export async function sendWhatsAppMessage(
  * Generate 6-digit OTP code
  */
 export function generateOTP(): string {
-  return Math.floor(100000 + Math.random() * 900000).toString();
+  // Math.random() is not cryptographically secure — an attacker who could
+  // predict or observe its internal state could predict OTPs.
+  return randomInt(100000, 1000000).toString();
 }
 
 /**
