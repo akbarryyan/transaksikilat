@@ -8,7 +8,7 @@
 import { NextResponse } from "next/server";
 import { ReconcileOrderService } from "@/src/core/services/provider/reconcile-order.service";
 import { OrderRepository } from "@/src/infra/db/repositories/order.repository";
-import { getSession } from "@/lib/session";
+import { requireAdminSession } from "@/lib/admin";
 
 export const dynamic = "force-dynamic";
 
@@ -22,9 +22,9 @@ export async function POST(
 ) {
   try {
     // ── Admin guard ────────────────────────────────────────────────────────
-    const session = await getSession();
-    if (!session.isLoggedIn || session.role !== "ADMIN") {
-      return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
+    const auth = await requireAdminSession();
+    if ("error" in auth) {
+      return NextResponse.json({ success: false, error: auth.error }, { status: auth.status });
     }
 
     const { id } = await params;

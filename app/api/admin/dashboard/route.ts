@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getSession } from "@/lib/session";
+import { requireAdminSession } from "@/lib/admin";
 import { prisma } from "@/src/infra/db/prisma";
 
 export const dynamic = "force-dynamic";
@@ -13,9 +13,9 @@ function deltaStr(today: number, yesterday: number): { delta: string; tone: "goo
 }
 
 export async function GET() {
-  const session = await getSession();
-  if (!session.isLoggedIn || session.role !== "ADMIN") {
-    return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+  const auth = await requireAdminSession();
+  if ("error" in auth) {
+    return NextResponse.json({ success: false, error: auth.error }, { status: auth.status });
   }
 
   const now = new Date();

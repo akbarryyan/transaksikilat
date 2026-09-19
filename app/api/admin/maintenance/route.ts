@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getSession } from "@/lib/session";
+import { requireAdminSession } from "@/lib/admin";
 import { getSiteConfig, setSiteConfig } from "@/lib/site-config";
 import { cookies } from "next/headers";
 
@@ -17,9 +17,9 @@ export async function GET() {
 
 export async function PATCH() {
   try {
-    const session = await getSession();
-    if (!session.isLoggedIn || session.role !== "ADMIN") {
-      return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
+    const auth = await requireAdminSession();
+    if ("error" in auth) {
+      return NextResponse.json({ success: false, error: auth.error }, { status: auth.status });
     }
 
     const current = await getSiteConfig(KEY);

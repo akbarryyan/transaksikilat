@@ -73,12 +73,6 @@ async function callHandler(
   );
 }
 
-// Rejection status is asserted as "401 or 403" rather than an exact code
-// because routes still using the older inline guard answer 401 where the
-// shared requireAdminSession() answers 403. Unifying that is a separate task;
-// the invariant this suite locks down is that the caller is refused.
-const REJECTED = [401, 403];
-
 describe("admin API route guards", () => {
   it("found route files to check", () => {
     // Guards against a broken glob silently turning this suite into a no-op.
@@ -86,7 +80,7 @@ describe("admin API route guards", () => {
   });
 
   for (const { path, load } of routeModules) {
-    it(`${path} refuses anonymous callers`, async () => {
+    it(`${path} refuses anonymous callers with 401`, async () => {
       sessionState.current = {};
 
       const routeModule = await load();
@@ -96,12 +90,12 @@ describe("admin API route guards", () => {
         const response = await callHandler(routeModule, method, path);
         expect(
           response.status,
-          `${method} ${path} must refuse an anonymous caller`
-        ).toBeOneOf(REJECTED);
+          `${method} ${path} must refuse an anonymous caller with 401`
+        ).toBe(401);
       }
     });
 
-    it(`${path} refuses non-admin sessions`, async () => {
+    it(`${path} refuses non-admin sessions with 403`, async () => {
       sessionState.current = {
         isLoggedIn: true,
         userId: "member-1",
@@ -115,8 +109,8 @@ describe("admin API route guards", () => {
         const response = await callHandler(routeModule, method, path);
         expect(
           response.status,
-          `${method} ${path} must refuse a non-admin caller`
-        ).toBeOneOf(REJECTED);
+          `${method} ${path} must refuse a non-admin caller with 403`
+        ).toBe(403);
       }
     });
   }

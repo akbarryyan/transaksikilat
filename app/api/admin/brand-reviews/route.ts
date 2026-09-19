@@ -1,16 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/src/infra/db/prisma";
-import { getSession } from "@/lib/session";
+import { requireAdminSession } from "@/lib/admin";
 
 export const dynamic = "force-dynamic";
-
-async function requireAdmin() {
-  const session = await getSession();
-  if (!session.isLoggedIn || session.role !== "ADMIN") {
-    return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
-  }
-  return null;
-}
 
 /**
  * GET /api/admin/brand-reviews
@@ -18,8 +10,10 @@ async function requireAdmin() {
  * Query: status=all|pending|approved, search, page
  */
 export async function GET(req: NextRequest) {
-  const deny = await requireAdmin();
-  if (deny) return deny;
+  const auth = await requireAdminSession();
+  if ("error" in auth) {
+    return NextResponse.json({ success: false, error: auth.error }, { status: auth.status });
+  }
 
   const { searchParams } = req.nextUrl;
   const status = searchParams.get("status") ?? "all";
@@ -74,8 +68,10 @@ export async function GET(req: NextRequest) {
  * Body: { id, action: "approve" | "reject" }
  */
 export async function PATCH(req: NextRequest) {
-  const deny = await requireAdmin();
-  if (deny) return deny;
+  const auth = await requireAdminSession();
+  if ("error" in auth) {
+    return NextResponse.json({ success: false, error: auth.error }, { status: auth.status });
+  }
 
   const body = await req.json();
   const { id, action } = body;
@@ -98,8 +94,10 @@ export async function PATCH(req: NextRequest) {
  * Hard delete a review.
  */
 export async function DELETE(req: NextRequest) {
-  const deny = await requireAdmin();
-  if (deny) return deny;
+  const auth = await requireAdminSession();
+  if ("error" in auth) {
+    return NextResponse.json({ success: false, error: auth.error }, { status: auth.status });
+  }
 
   const id = req.nextUrl.searchParams.get("id");
   if (!id) return NextResponse.json({ success: false, error: "ID diperlukan." }, { status: 400 });

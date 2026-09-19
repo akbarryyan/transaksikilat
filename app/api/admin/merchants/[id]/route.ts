@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { getSession } from "@/lib/session";
+import { requireAdminSession } from "@/lib/admin";
 import { prisma } from "@/src/infra/db/prisma";
 
 export const dynamic = "force-dynamic";
@@ -9,22 +9,14 @@ const PatchSchema = z.object({
   isActive: z.boolean(),
 });
 
-async function ensureAdmin() {
-  const session = await getSession();
-  if (!session.isLoggedIn || !session.userId || session.role !== "ADMIN") {
-    return null;
-  }
-  return session;
-}
-
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await ensureAdmin();
-    if (!session) {
-      return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
+    const auth = await requireAdminSession();
+    if ("error" in auth) {
+      return NextResponse.json({ success: false, error: auth.error }, { status: auth.status });
     }
 
     const { id } = await params;

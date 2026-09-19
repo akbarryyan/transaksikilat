@@ -4,7 +4,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { getSession } from "@/lib/session";
+import { requireAdminSession } from "@/lib/admin";
 import { prisma } from "@/src/infra/db/prisma";
 
 export const dynamic = "force-dynamic";
@@ -13,11 +13,11 @@ export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
-    const session = await getSession();
-
-    if (!session.isLoggedIn || !session.userId || session.role !== "ADMIN") {
-      return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
+    const auth = await requireAdminSession();
+    if ("error" in auth) {
+      return NextResponse.json({ success: false, error: auth.error }, { status: auth.status });
     }
+    const { session } = auth;
 
     const user = await prisma.user.findUnique({
       where: { id: session.userId },
@@ -47,11 +47,11 @@ export async function GET() {
 
 export async function PATCH(req: NextRequest) {
   try {
-    const session = await getSession();
-
-    if (!session.isLoggedIn || !session.userId || session.role !== "ADMIN") {
-      return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
+    const auth = await requireAdminSession();
+    if ("error" in auth) {
+      return NextResponse.json({ success: false, error: auth.error }, { status: auth.status });
     }
+    const { session } = auth;
 
     const body = await req.json();
     const { email, name, phone } = body;

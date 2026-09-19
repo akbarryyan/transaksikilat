@@ -1,22 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSession } from "@/lib/session";
+import { requireAdminSession } from "@/lib/admin";
 import { prisma } from "@/src/infra/db/prisma";
 
 export const dynamic = "force-dynamic";
 
-async function ensureAdmin() {
-  const session = await getSession();
-  if (!session.isLoggedIn || !session.userId || session.role !== "ADMIN") {
-    return null;
-  }
-  return session;
-}
-
 export async function GET(request: NextRequest) {
   try {
-    const session = await ensureAdmin();
-    if (!session) {
-      return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
+    const auth = await requireAdminSession();
+    if ("error" in auth) {
+      return NextResponse.json({ success: false, error: auth.error }, { status: auth.status });
     }
 
     const q = request.nextUrl.searchParams.get("q")?.trim() ?? "";
