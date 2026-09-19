@@ -14,6 +14,7 @@ export async function POST(request: Request) {
     if (!session.isLoggedIn || !session.userId) {
       return NextResponse.json({ success: false, error: "Login diperlukan." }, { status: 401 });
     }
+    const userId = session.userId;
 
     const body = await request.json().catch(() => ({}));
     const code = (body?.code ?? "").toString().trim().toUpperCase();
@@ -42,26 +43,40 @@ export async function POST(request: Request) {
 
     // Check user claim count
     const userClaimCount = await prisma.voucherClaim.count({
-      where: { voucherId: voucher.id, userId: session.userId },
+      where: { voucherId: voucher.id, userId },
     });
     if (userClaimCount >= voucher.perUserLimit) {
       return NextResponse.json({ success: false, error: "Kamu sudah mengklaim voucher ini." }, { status: 400 });
     }
 
-    // Create claim & increment usedCount
-    const [claim] = await prisma.$transaction([
-      prisma.voucherClaim.create({
+    // Claiming the quota slot is a single conditional UPDATE, guarded on the
+    // usedCount MySQL still holds at write time — not the value read above,
+    // which several simultaneous requests would otherwise share. Checking
+    // usedCount and incrementing it as two separate steps let concurrent
+    // claims near the boundary all pass the check and all increment,
+    // oversubscribing a limited voucher.
+    const claim = await prisma.$transaction(async (tx) => {
+      const claimed = await tx.voucher.updateMany({
+        where: {
+          id: voucher.id,
+          OR: [{ quota: null }, { usedCount: { lt: voucher.quota ?? 0 } }],
+        },
+        data: { usedCount: { increment: 1 } },
+      });
+      if (claimed.count === 0) return null;
+
+      return tx.voucherClaim.create({
         data: {
           voucherId: voucher.id,
-          userId: session.userId,
+          userId,
           status: "CLAIMED",
         },
-      }),
-      prisma.voucher.update({
-        where: { id: voucher.id },
-        data: { usedCount: { increment: 1 } },
-      }),
-    ]);
+      });
+    });
+
+    if (!claim) {
+      return NextResponse.json({ success: false, error: "Kuota voucher sudah habis." }, { status: 400 });
+    }
 
     return NextResponse.json({
       success: true,
