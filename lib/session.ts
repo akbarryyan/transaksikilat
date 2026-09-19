@@ -10,11 +10,14 @@ export interface SessionData {
   isLoggedIn?: boolean;
 }
 
-function shouldUseSecureCookies(): boolean {
-  if (process.env.NODE_ENV !== "production") return false;
-
-  const appUrl = process.env.APP_URL ?? process.env.NEXT_PUBLIC_APP_URL ?? "";
-  return appUrl.startsWith("https://");
+/**
+ * Any production deployment of this app is expected to run behind HTTPS —
+ * tying this to a string match against APP_URL meant a missing or
+ * misconfigured env var silently stripped Secure from the session cookie
+ * while the app was still served over HTTPS behind a proxy.
+ */
+export function shouldUseSecureCookies(): boolean {
+  return process.env.NODE_ENV === "production";
 }
 
 export const sessionOptions: SessionOptions = {
