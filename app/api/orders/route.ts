@@ -27,7 +27,7 @@ export async function GET(request: Request) {
     const limit = Math.min(50, Math.max(1, Number(searchParams.get("limit") ?? 10)));
     const skip = (page - 1) * limit;
 
-    const [initialOrders, total] = await Promise.all([
+    const [orders, total] = await Promise.all([
       prisma.order.findMany({
         where: { userId: session.userId },
         orderBy: { createdAt: "desc" },
@@ -55,38 +55,20 @@ export async function GET(request: Request) {
       prisma.order.count({ where: { userId: session.userId } }),
     ]);
 
-    // Hanya daftar order yang diperbarui setelah rekonsiliasi.
-    let orders = initialOrders;
-
+    // Reconciled opportunistically, in the background: a page load is a good
+    // moment to nudge any of the user's own in-flight orders, but the reader
+    // should never wait on a live call to a provider that may be slow or
+    // down. Each order also gets reconciled on its own detail page, which
+    // polls every few seconds — this is a bonus catch-up, not the only path.
+    // The cron sweep (/api/cron/reconcile-orders) is the reliability backstop
+    // for anything that slips past both.
     const reconcileCandidates = orders
       .filter((order) => order.status === "PAID" || order.status === "PROCESSING_PROVIDER")
       .slice(0, 5);
 
-    if (reconcileCandidates.length > 0) {
-      await Promise.allSettled(reconcileCandidates.map((order) => autoReconcileOrderNow(order.id)));
-      orders = await prisma.order.findMany({
-        where: { userId: session.userId },
-        orderBy: { createdAt: "desc" },
-        skip,
-        take: limit,
-        select: {
-          id: true,
-          orderCode: true,
-          status: true,
-          amount: true,
-          fee: true,
-          paymentMethod: true,
-          notes: true,
-          serialNumber: true,
-          createdAt: true,
-          updatedAt: true,
-          product: {
-            select: { name: true, brand: true, category: true },
-          },
-          paymentInvoice: {
-            select: { status: true, method: true, paymentUrl: true, expiredAt: true, paidAt: true },
-          },
-        },
+    for (const order of reconcileCandidates) {
+      autoReconcileOrderNow(order.id).catch((err) => {
+        console.error(`[GET /api/orders] Background reconcile failed for ${order.id}:`, err);
       });
     }
 
