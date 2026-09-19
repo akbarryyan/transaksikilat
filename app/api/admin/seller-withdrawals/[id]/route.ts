@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/src/infra/db/prisma";
-import { PoppayClient } from "@/src/infra/payment/poppay/poppay.client";
+import { PoppayPayoutAdapter } from "@/src/infra/payment/poppay/poppay-payout.adapter";
 import { requireAdminSession } from "@/lib/admin";
 
 export const dynamic = "force-dynamic";
@@ -12,14 +12,6 @@ const UpdateWithdrawalSchema = z.object({
   bankCode: z.string().trim().max(40).optional(),
   processedNote: z.string().max(1000).optional(),
 });
-
-function normalizeBankLabel(value: string): string {
-  return value
-    .toLowerCase()
-    .replace(/\b(pt|tbk|persero)\b/g, "")
-    .replace(/[^a-z0-9]+/g, " ")
-    .trim();
-}
 
 function resolvePoppayCallbackUrl(): string | null {
   const baseUrl =
@@ -38,24 +30,6 @@ function toPrismaJson(
   return value
     ? (value as Prisma.InputJsonValue)
     : Prisma.JsonNull;
-}
-
-async function resolvePoppayBankCode(explicitBankCode: string | null | undefined, bankName: string): Promise<string> {
-  if (explicitBankCode?.trim()) return explicitBankCode.trim();
-
-  const client = new PoppayClient();
-  const banks = await client.listBanks({ start: 0, length: 500, filters: [{ key: "c", value: "IDR" }] });
-  const normalizedTarget = normalizeBankLabel(bankName);
-
-  const exact = banks.data.find((item) => normalizeBankLabel(item.name) === normalizedTarget);
-  if (exact) return exact.code;
-
-  const contains = banks.data.filter((item) => normalizeBankLabel(item.name).includes(normalizedTarget));
-  if (contains.length === 1) return contains[0].code;
-
-  throw new Error(
-    `Kode bank Poppay untuk "${bankName}" belum ditemukan. Simpan bankCode yang benar sebelum approve withdraw.`
-  );
 }
 
 export async function PATCH(
@@ -95,9 +69,12 @@ export async function PATCH(
         throw new Error("Withdraw hanya bisa di-approve dari status PENDING.");
       }
 
-      const bankCode = await resolvePoppayBankCode(parsed.data.bankCode || current.bankCode, current.bankName);
-      const client = new PoppayClient();
-      const payout = await client.createOutgoing({
+      const payoutGateway = new PoppayPayoutAdapter();
+      const bankCode = await payoutGateway.resolveBankCode(
+        parsed.data.bankCode || current.bankCode,
+        current.bankName
+      );
+      const payout = await payoutGateway.createOutgoing({
         aggRefId: `withdraw-${current.id}`,
         amount: Number(current.amount),
         bankCode,
