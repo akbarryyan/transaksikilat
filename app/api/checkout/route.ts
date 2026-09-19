@@ -8,6 +8,11 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { CreateCheckoutService } from "@/src/core/services/checkout/create-checkout.service";
+import {
+  reserveVoucherForCheckout,
+  finalizeVoucherReservation,
+  releaseVoucherReservation,
+} from "@/src/core/services/checkout/reserve-voucher.service";
 import { OrderRepository } from "@/src/infra/db/repositories/order.repository";
 import { PoppayAdapter } from "@/src/infra/payment/poppay/poppay.adapter";
 import { isPoppayConfigured } from "@/src/infra/payment/poppay/poppay.client";
@@ -35,74 +40,11 @@ const CheckoutSchema = z.object({
   voucherCode: z.string().max(50).optional(),
 });
 
-/** Validate a voucher code and return the discount amount to apply. Returns 0 if invalid. */
-async function resolveVoucherDiscount(
-  code: string | undefined,
-  baseAmount: number,
-  userId: string | null
-): Promise<{ discountAmount: number; voucherId: string | null }> {
-  if (!code) return { discountAmount: 0, voucherId: null };
-
-  const voucher = await prisma.voucher.findUnique({ where: { code: code.toUpperCase() } });
-  if (!voucher || !voucher.isActive) return { discountAmount: 0, voucherId: null };
-
-  const now = new Date();
-  if (voucher.startDate && now < voucher.startDate) return { discountAmount: 0, voucherId: null };
-  if (voucher.endDate && now > voucher.endDate) return { discountAmount: 0, voucherId: null };
-  if (voucher.quota !== null && voucher.usedCount >= voucher.quota) return { discountAmount: 0, voucherId: null };
-  if (baseAmount < Number(voucher.minPurchase)) return { discountAmount: 0, voucherId: null };
-
-  if (userId) {
-    const uses = await prisma.voucherClaim.count({ where: { voucherId: voucher.id, userId } });
-    if (uses >= voucher.perUserLimit) return { discountAmount: 0, voucherId: null };
-  }
-
-  let discountAmount = 0;
-  if (voucher.discountType === "FIXED") {
-    discountAmount = Number(voucher.discountValue);
-  } else {
-    discountAmount = Math.floor((baseAmount * Number(voucher.discountValue)) / 100);
-    if (voucher.maxDiscount !== null) {
-      discountAmount = Math.min(discountAmount, Number(voucher.maxDiscount));
-    }
-  }
-  discountAmount = Math.min(discountAmount, baseAmount - 1);
-
-  return { discountAmount, voucherId: voucher.id };
-}
-
-/** Mark voucher as used after a successful order. Creates or updates the VoucherClaim. */
-async function markVoucherUsed(voucherId: string, userId: string | null, orderId: string) {
-  try {
-    await prisma.$transaction(async (tx) => {
-      if (userId) {
-        // Upsert claim: either the user already claimed it on /voucher page, or it's a direct-use at checkout
-        const existing = await tx.voucherClaim.findUnique({
-          where: { voucherId_userId: { voucherId, userId } },
-        });
-        if (existing) {
-          await tx.voucherClaim.update({
-            where: { id: existing.id },
-            data: { status: "USED", usedAt: new Date(), orderId },
-          });
-        } else {
-          await tx.voucherClaim.create({
-            data: { voucherId, userId, status: "USED", usedAt: new Date(), orderId },
-          });
-        }
-      }
-      await tx.voucher.update({
-        where: { id: voucherId },
-        data: { usedCount: { increment: 1 } },
-      });
-    });
-  } catch (err) {
-    // Don't fail the order if voucher tracking fails
-    console.error("[checkout] markVoucherUsed error:", err);
-  }
-}
-
 export async function POST(request: Request) {
+  // Declared outside the try block so the catch handler can release it if
+  // checkout fails after the voucher's quota slot was already reserved.
+  let voucherReservation: Awaited<ReturnType<typeof reserveVoucherForCheckout>>["reservation"] = null;
+
   try {
     // ── 1. Parse body ──────────────────────────────────────────────────────
     let body: unknown;
@@ -132,19 +74,11 @@ export async function POST(request: Request) {
       );
     }
 
-    // ── 4. Resolve voucher discount (lightweight — product price needed) ───
-    // Fetch product price to compute discount accurately
-    let baseAmount = 0;
-    if (parsed.data.voucherCode) {
-      const prod = await prisma.product.findUnique({ where: { id: parsed.data.productId } });
-      if (prod) baseAmount = Number(prod.sellingPrice ?? 0);
-    }
-    const { discountAmount, voucherId } = await resolveVoucherDiscount(
-      parsed.data.voucherCode,
-      baseAmount,
-      userId
-    );
-
+    // ── 4. Payment gateway must be ready before anything gets reserved ──────
+    // This check is a plain early return, not a thrown error, so it must run
+    // before the voucher is reserved below — otherwise a reservation made
+    // just before this returns would never reach the catch block that
+    // releases it.
     if (parsed.data.paymentMethod === "PAYMENT_GATEWAY" && !(await isPoppayConfigured())) {
       return NextResponse.json(
         {
@@ -155,10 +89,26 @@ export async function POST(request: Request) {
       );
     }
 
-    // ── 5. Buat Poppay adapter ─────────────────────────────────────────────
+    // ── 5. Reserve voucher discount (lightweight — product price needed) ───
+    // Reserving the quota slot now, before the order exists, is what closes
+    // the race: two checkouts near the boundary can no longer both read the
+    // same usedCount and both apply the discount.
+    let baseAmount = 0;
+    if (parsed.data.voucherCode) {
+      const prod = await prisma.product.findUnique({ where: { id: parsed.data.productId } });
+      if (prod) baseAmount = Number(prod.sellingPrice ?? 0);
+    }
+    const { discountAmount, reservation } = await reserveVoucherForCheckout(
+      parsed.data.voucherCode,
+      baseAmount,
+      userId
+    );
+    voucherReservation = reservation;
+
+    // ── 6. Buat Poppay adapter ─────────────────────────────────────────────
     const paymentGateway = new PoppayAdapter();
 
-    // ── 6. Call service ────────────────────────────────────────────────────
+    // ── 7. Call service ────────────────────────────────────────────────────
     const checkoutService = new CreateCheckoutService(
       new OrderRepository(),
       paymentGateway,
@@ -171,9 +121,11 @@ export async function POST(request: Request) {
       voucherDiscount: discountAmount,
     });
 
-    // ── 7. Mark voucher as used (fire-and-forget, non-blocking) ───────────
-    if (voucherId) {
-      markVoucherUsed(voucherId, userId, result.orderCode);
+    // ── 8. Attach the order to the voucher claim (fire-and-forget) ─────────
+    // Bookkeeping only at this point — the quota slot is already correctly
+    // and atomically consumed, so this failing must not fail the order.
+    if (voucherReservation) {
+      finalizeVoucherReservation(voucherReservation, result.orderCode);
     }
 
     return NextResponse.json(
@@ -181,6 +133,10 @@ export async function POST(request: Request) {
       { status: 201 }
     );
   } catch (err) {
+    // The order was never placed — hand back any voucher slot this attempt
+    // reserved so it isn't silently wasted on a checkout that never happened.
+    await releaseVoucherReservation(voucherReservation);
+
     if (err instanceof ValidationError || err instanceof GuestWalletError) {
       return NextResponse.json({ success: false, error: err.message }, { status: 400 });
     }
