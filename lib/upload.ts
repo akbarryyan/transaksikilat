@@ -16,6 +16,45 @@ const MIME_EXTENSIONS: Record<string, string> = {
 };
 
 /**
+ * Checks the file's actual leading bytes against its declared MIME type.
+ * `file.type` on an upload is client-supplied — the Content-Type of a
+ * multipart form field — so trusting it alone lets an attacker upload
+ * arbitrary content under an "image/png" label. This never inspects the
+ * whole file, only the handful of bytes that make each format identifiable.
+ */
+export function matchesImageSignature(buffer: Buffer, declaredType: string): boolean {
+  switch (declaredType) {
+    case "image/png":
+      return (
+        buffer.length >= 8 &&
+        buffer[0] === 0x89 &&
+        buffer[1] === 0x50 &&
+        buffer[2] === 0x4e &&
+        buffer[3] === 0x47 &&
+        buffer[4] === 0x0d &&
+        buffer[5] === 0x0a &&
+        buffer[6] === 0x1a &&
+        buffer[7] === 0x0a
+      );
+    case "image/jpeg":
+      return buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff;
+    case "image/gif": {
+      if (buffer.length < 6) return false;
+      const header = buffer.subarray(0, 6).toString("ascii");
+      return header === "GIF87a" || header === "GIF89a";
+    }
+    case "image/webp":
+      return (
+        buffer.length >= 12 &&
+        buffer.subarray(0, 4).toString("ascii") === "RIFF" &&
+        buffer.subarray(8, 12).toString("ascii") === "WEBP"
+      );
+    default:
+      return false;
+  }
+}
+
+/**
  * Accepts both legacy absolute URLs (third-party hosting, e.g. https://i.ibb.co.com/...)
  * and local paths produced by /api/upload (e.g. /uploads/promos/xxx.png), so existing
  * stored values keep working while new uploads use local storage.
@@ -41,12 +80,16 @@ export async function saveUploadedImage(file: File, folder: UploadFolder): Promi
     throw new UploadError("Ukuran gambar maksimal 5MB.");
   }
 
+  const buffer = Buffer.from(await file.arrayBuffer());
+  if (!matchesImageSignature(buffer, file.type)) {
+    throw new UploadError("Isi file tidak sesuai dengan format gambar yang diklaim.");
+  }
+
   const extension = MIME_EXTENSIONS[file.type];
   const filename = `${randomUUID()}.${extension}`;
   const dir = path.join(process.cwd(), "public", "uploads", folder);
   await mkdir(dir, { recursive: true });
 
-  const buffer = Buffer.from(await file.arrayBuffer());
   await writeFile(path.join(dir, filename), buffer);
 
   return `/uploads/${folder}/${filename}`;
