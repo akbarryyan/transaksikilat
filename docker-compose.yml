@@ -9,5 +9,7 @@ services:
     environment:
       NODE_ENV: production
       PORT: 3003
+      LOG_DIR: /app/logs
     volumes:
       - /var/www/transaksikilat/public/uploads:/app/public/uploads
+      - /var/www/transaksikilat/logs:/app/logs

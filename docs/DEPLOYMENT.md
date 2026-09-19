@@ -109,10 +109,54 @@ Cek hasilnya di log aplikasi — baris hanya muncul kalau ada yang dikerjakan:
 
 ```bash
 docker compose logs --tail=200 transaksikilat-app | grep "Cron/Reconcile"
+# atau langsung dari file (lihat bagian "Log aplikasi" di bawah):
+tail -f /var/www/transaksikilat/logs/app.log | grep "Cron/Reconcile"
 ```
 
 Endpoint admin `POST /api/admin/transactions/reconcile-all` tetap ada untuk
 sapuan manual dari panel admin.
+
+## Log aplikasi (tanpa `docker logs`)
+
+Setiap `console.log`/`console.error` di aplikasi ditulis dua kali: ke
+stdout (yang dibaca `docker logs`) dan ke file
+`/var/www/transaksikilat/logs/app.log` di host — dipasang lewat volume
+`logs:/app/logs` di `docker-compose.yml`, diinisialisasi sekali saat startup
+oleh `instrumentation.ts` (`lib/logger.ts`). File ini tetap ada walau
+container di-restart atau di-recreate, dan bisa dibaca tanpa akses ke
+Docker sama sekali:
+
+```bash
+tail -f /var/www/transaksikilat/logs/app.log
+grep "ERROR" /var/www/transaksikilat/logs/app.log
+```
+
+Direktori `/var/www/transaksikilat/logs` harus sudah ada sebelum
+`docker compose up -d` pertama kali (Docker akan membuatnya otomatis kalau
+belum ada, tapi sebagai root — bikin manual dulu kalau mau kepemilikannya
+sesuai user VPS-mu):
+
+```bash
+mkdir -p /var/www/transaksikilat/logs
+```
+
+File ini tidak dirotasi oleh aplikasi — supaya tidak tumbuh tanpa batas,
+pasang `logrotate` di VPS, misal `/etc/logrotate.d/transaksikilat`:
+
+```
+/var/www/transaksikilat/logs/app.log {
+    daily
+    rotate 14
+    compress
+    missingok
+    notifempty
+    copytruncate
+}
+```
+
+`copytruncate` dipakai karena aplikasi menulis ke file ini dengan
+append-per-baris (tanpa menyimpan file handle terbuka lama), jadi truncate
+di tempat aman dilakukan kapan saja tanpa perlu me-restart container.
 
 ## Gate test
 
