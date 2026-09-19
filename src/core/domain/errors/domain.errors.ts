@@ -20,8 +20,8 @@ export class NotFoundError extends DomainError {
 }
 
 export class InsufficientBalanceError extends DomainError {
-  constructor() {
-    super("Insufficient wallet balance");
+  constructor(message = "Insufficient wallet balance") {
+    super(message);
     this.name = "InsufficientBalanceError";
   }
 }
