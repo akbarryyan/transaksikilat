@@ -53,8 +53,13 @@ ssh <user>@<vps-host>
 cd /var/www/transaksikilat
 docker compose pull
 docker compose up -d
+docker image prune -af            # buang image lama — lihat "Kebersihan disk" di bawah
 docker inspect transaksikilat-app --format '{{.Config.Image}}'   # harus ghcr.io/akbarryyan/transaksikilat:latest
 ```
+
+`docker image prune -af` hanya menghapus image yang tidak dipakai container
+manapun, jadi aman dijalankan tepat setelah `up -d` — container yang baru saja
+naik memegang image barunya, yang terhapus hanya versi-versi lama.
 
 **Kalau rilisnya mengandung migration database**, sisipkan satu langkah di
 antara `pull` dan `up -d`:
@@ -157,6 +162,41 @@ pasang `logrotate` di VPS, misal `/etc/logrotate.d/transaksikilat`:
 `copytruncate` dipakai karena aplikasi menulis ke file ini dengan
 append-per-baris (tanpa menyimpan file handle terbuka lama), jadi truncate
 di tempat aman dilakukan kapan saja tanpa perlu me-restart container.
+
+## Kebersihan disk
+
+**Insiden 2026-09-20:** disk VPS (40G) penuh 100%, MySQL mati dengan
+`Error: 28 (No space left on device)` dan production down ~1.5 hari sampai
+ketahuan. Penyebabnya: 22 image Docker menumpuk dari deploy berulang (~24GB)
+plus 3.3GB build cache — tidak ada satu pun yang pernah dibersihkan. Setelah
+`docker builder prune -af` + `docker image prune -af`, pemakaian turun dari
+39G ke 18G.
+
+Dua hal yang sekarang menutup celah itu:
+
+1. `docker image prune -af` sudah jadi bagian dari langkah deploy di atas.
+2. `docker-compose.yml` membatasi log container (`max-size: 10m`,
+   `max-file: 3`). Tanpa ini driver `json-file` menulis stdout tanpa batas
+   ukuran sama sekali — dan sejak fitur file logging dipasang, setiap baris
+   `console.*` juga masuk stdout.
+
+Perubahan `logging:` baru berlaku setelah container dibuat ulang, dan tidak
+memotong file log container yang sudah ada — jalankan `docker compose up -d`
+sekali setelah menyalin compose file yang baru.
+
+Cek berkala (atau saat ada yang terasa aneh):
+
+```bash
+df -h /                 # <80% aman
+docker system df        # image/build cache yang bisa direklaim
+```
+
+Kalau `df` dan `du` berselisih jauh, curigai file terhapus yang masih dipegang
+proses: `sudo lsof +L1`.
+
+Dua sumber pertumbuhan lain yang belum dibatasi dan perlu diawasi:
+`/var/www/transaksikilat/public/uploads` (upload user, tumbuh tanpa batas
+seiring transaksi) dan cache npm di `/root/.npm`.
 
 ## Gate test
 
