@@ -54,6 +54,25 @@ function withdrawalInput(userId: string, overrides: Partial<{ amount: number }> 
   };
 }
 
+/**
+ * A seller whose first payout has already been through admin review. Until that
+ * has happened once, a withdrawal is held rather than paid out, so every test
+ * about the automatic path needs this first.
+ */
+async function seedReviewedWithdrawal(userId: string) {
+  await prisma.sellerWithdrawalRequest.create({
+    data: {
+      userId,
+      amount: 1_000,
+      status: "PAID",
+      accountName: "Withdraw Subject",
+      accountNumber: "1234567890",
+      bankName: "BCA",
+      payoutGateway: "FAKE",
+    },
+  });
+}
+
 describe("CreateWithdrawalService", () => {
   let gateway: FakePayoutGateway;
   let service: CreateWithdrawalService;
@@ -66,6 +85,7 @@ describe("CreateWithdrawalService", () => {
 
   it("debits the wallet, submits the payout, and approves the request", async () => {
     const userId = await createSeller(AMOUNT);
+    await seedReviewedWithdrawal(userId);
 
     const result = await service.execute(withdrawalInput(userId));
 
@@ -107,6 +127,7 @@ describe("CreateWithdrawalService", () => {
 
   it("returns the money and rejects the request when the payout fails", async () => {
     const userId = await createSeller(AMOUNT);
+    await seedReviewedWithdrawal(userId);
     gateway.outgoingError = "Poppay down";
 
     await expect(service.execute(withdrawalInput(userId))).rejects.toThrow("Poppay down");
@@ -114,7 +135,10 @@ describe("CreateWithdrawalService", () => {
     const wallet = await prisma.wallet.findUniqueOrThrow({ where: { userId } });
     expect(Number(wallet.balance)).toBe(AMOUNT);
 
-    const request = await prisma.sellerWithdrawalRequest.findFirstOrThrow({ where: { userId } });
+    // The seller also has the reviewed request seeded above; this is the new one.
+    const request = await prisma.sellerWithdrawalRequest.findFirstOrThrow({
+      where: { userId, NOT: { status: "PAID" } },
+    });
     expect(request.status).toBe("REJECTED");
     expect(request.processedNote).toContain("Poppay down");
 
@@ -127,6 +151,7 @@ describe("CreateWithdrawalService", () => {
 
   it("returns the money and rejects the request when bank code resolution fails", async () => {
     const userId = await createSeller(AMOUNT);
+    await seedReviewedWithdrawal(userId);
     gateway.bankCodeError = "Kode bank tidak ditemukan";
 
     await expect(service.execute(withdrawalInput(userId))).rejects.toThrow(
@@ -137,7 +162,10 @@ describe("CreateWithdrawalService", () => {
     const wallet = await prisma.wallet.findUniqueOrThrow({ where: { userId } });
     expect(Number(wallet.balance)).toBe(AMOUNT);
 
-    const request = await prisma.sellerWithdrawalRequest.findFirstOrThrow({ where: { userId } });
+    // The seller also has the reviewed request seeded above; this is the new one.
+    const request = await prisma.sellerWithdrawalRequest.findFirstOrThrow({
+      where: { userId, NOT: { status: "PAID" } },
+    });
     expect(request.status).toBe("REJECTED");
   });
 
@@ -157,5 +185,61 @@ describe("CreateWithdrawalService", () => {
     const wallet = await prisma.wallet.findUnique({ where: { userId: user.id } });
     expect(wallet).not.toBeNull();
     expect(Number(wallet!.balance)).toBe(0);
+  });
+  it("holds a seller's first payout for review instead of sending the money", async () => {
+    const userId = await createSeller(AMOUNT);
+
+    const result = await service.execute(withdrawalInput(userId));
+
+    expect(result.status).toBe("PENDING");
+    expect(gateway.calls).toHaveLength(0);
+
+    // The balance still moves: the money is set aside while an admin looks at
+    // it, otherwise the seller could queue the same funds several times over.
+    const wallet = await prisma.wallet.findUniqueOrThrow({ where: { userId } });
+    expect(Number(wallet.balance)).toBe(0);
+
+    const ledger = await prisma.ledgerEntry.findMany({ where: { walletId: wallet.id } });
+    expect(ledger.map((e) => e.type)).toEqual(["WITHDRAW_HOLD"]);
+  });
+
+  it("pays out automatically once one of the seller's payouts has been reviewed", async () => {
+    const userId = await createSeller(AMOUNT);
+    await seedReviewedWithdrawal(userId);
+
+    const result = await service.execute(withdrawalInput(userId));
+
+    expect(result.status).toBe("APPROVED");
+    expect(gateway.calls).toHaveLength(1);
+  });
+
+  it("does not count another seller's reviewed payout as trust", async () => {
+    const stranger = await createSeller(AMOUNT);
+    await seedReviewedWithdrawal(stranger);
+    const userId = await createSeller(AMOUNT);
+
+    const result = await service.execute(withdrawalInput(userId));
+
+    expect(result.status).toBe("PENDING");
+    expect(gateway.calls).toHaveLength(0);
+  });
+
+  it("keeps holding while the seller's only prior request was rejected", async () => {
+    const userId = await createSeller(AMOUNT);
+    await prisma.sellerWithdrawalRequest.create({
+      data: {
+        userId,
+        amount: 1_000,
+        status: "REJECTED",
+        accountName: "Withdraw Subject",
+        accountNumber: "1234567890",
+        bankName: "BCA",
+      },
+    });
+
+    const result = await service.execute(withdrawalInput(userId));
+
+    expect(result.status).toBe("PENDING");
+    expect(gateway.calls).toHaveLength(0);
   });
 });

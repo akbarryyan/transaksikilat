@@ -31,6 +31,12 @@ function resolvePayoutCallbackUrl(): string | null {
  * resolution or the outgoing transfer itself — fails, the hold is reversed:
  * the money goes back and the request is rejected. The seller is never left
  * holding a PENDING request with no money and no payout in flight.
+ *
+ * A seller's first payout is the exception: it stops at the hold and waits for
+ * an admin. Becoming a merchant takes one request and no approval, so without
+ * this an account created minutes ago could send money to any bank account it
+ * liked before anyone saw it. Once an admin has approved one payout the account
+ * is known, and later requests go straight out as before.
  */
 export class CreateWithdrawalService {
   constructor(
@@ -42,6 +48,12 @@ export class CreateWithdrawalService {
     const held = await this.repo.createHold(input);
     if (!held) {
       throw new InsufficientBalanceError("Saldo seller tidak cukup untuk withdraw");
+    }
+
+    // The hold stays either way: the money is set aside while the request waits,
+    // otherwise the same balance could be queued several times over.
+    if (!(await this.repo.hasReviewedWithdrawal(input.userId))) {
+      return held;
     }
 
     try {

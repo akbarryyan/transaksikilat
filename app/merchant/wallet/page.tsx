@@ -69,7 +69,7 @@ function ledgerMeta(type: string) {
 
 function withdrawalStatusMeta(status: string) {
   if (status === "PENDING") {
-    return { label: "Menunggu Diproses", className: "bg-amber-100 text-amber-700 ring-1 ring-amber-200" };
+    return { label: "Menunggu Persetujuan Admin", className: "bg-amber-100 text-amber-700 ring-1 ring-amber-200" };
   }
   if (status === "APPROVED") {
     return { label: "Payout Diproses", className: "bg-sky-100 text-sky-700 ring-1 ring-sky-200" };
@@ -185,7 +185,12 @@ export default function MerchantWalletPage() {
         throw new Error(json.error || "Gagal mengajukan withdraw");
       }
 
-      showSuccess("Request withdraw berhasil dibuat dan payout sedang diproses.");
+      // A merchant's first payout waits for an admin; later ones go straight out.
+      showSuccess(
+        json.data?.status === "PENDING"
+          ? "Request withdraw berhasil dibuat. Payout pertama menunggu persetujuan admin — saldo sudah ditahan."
+          : "Request withdraw berhasil dibuat dan payout sedang diproses."
+      );
       setForm({
         amount: "",
         accountName: "",
