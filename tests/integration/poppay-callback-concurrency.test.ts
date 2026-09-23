@@ -73,8 +73,17 @@ describe("poppay callbacks under concurrency", () => {
   it("credits a top-up once when two callbacks for it arrive at the same time", async () => {
     const userId = await createUser(0);
     const topupCode = "WT-20260918-9001";
+    // A pending top-up always carries the gateway reference it was created
+    // with — settlement is verified against that id, not against whatever
+    // refid a callback happens to name.
     await prisma.walletTopup.create({
-      data: { topupCode, userId, amount: AMOUNT, status: "PENDING" },
+      data: {
+        topupCode,
+        userId,
+        amount: AMOUNT,
+        status: "PENDING",
+        invoiceId: "poppay-ref-concurrency-test",
+      },
     });
 
     await Promise.all(

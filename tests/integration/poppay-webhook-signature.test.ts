@@ -37,8 +37,17 @@ async function createPendingTopup(): Promise<string> {
     },
   });
 
+  // A pending top-up always carries the gateway reference it was created with —
+  // that is the id settlement is verified against, and the checkout deletes the
+  // row outright when the gateway never issued one.
   await prisma.walletTopup.create({
-    data: { topupCode: TOPUP_CODE, userId: user.id, amount: AMOUNT, status: "PENDING" },
+    data: {
+      topupCode: TOPUP_CODE,
+      userId: user.id,
+      amount: AMOUNT,
+      status: "PENDING",
+      invoiceId: "poppay-ref-signature-test",
+    },
   });
 
   return user.id;
