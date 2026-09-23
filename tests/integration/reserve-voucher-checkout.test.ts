@@ -76,14 +76,30 @@ describe("reserveVoucherForCheckout", () => {
     expect(claim.userId).toBe(userId);
   });
 
-  it("reserves a slot for a guest checkout without a claim row", async () => {
+  it("refuses a voucher on a checkout with nobody signed in", async () => {
+    // Per-user limits are enforced through the claim row, and a guest has no
+    // account to hang one on. Honouring the code anyway meant one person could
+    // spend the same voucher until the quota ran out — or without limit when
+    // the voucher has no quota. Voucher codes are public: /api/vouchers lists
+    // every active one.
     const voucher = await createVoucher();
 
     const result = await reserveVoucherForCheckout(voucher.code, BASE_AMOUNT, null);
 
-    expect(result.reservation).toMatchObject({ isNewReservation: true, claimId: null });
+    expect(result.discountAmount).toBe(0);
+    expect(result.reservation).toBeNull();
+
     const updated = await prisma.voucher.findUniqueOrThrow({ where: { id: voucher.id } });
-    expect(updated.usedCount).toBe(1);
+    expect(updated.usedCount).toBe(0);
+  });
+
+  it("refuses an unlimited-quota voucher to a guest too", async () => {
+    const voucher = await createVoucher({ quota: null });
+
+    const result = await reserveVoucherForCheckout(voucher.code, BASE_AMOUNT, null);
+
+    expect(result.discountAmount).toBe(0);
+    expect(result.reservation).toBeNull();
   });
 
   it("caps a percentage discount at maxDiscount", async () => {
@@ -99,7 +115,9 @@ describe("reserveVoucherForCheckout", () => {
       },
     });
 
-    const result = await reserveVoucherForCheckout(voucher.code, BASE_AMOUNT, null);
+    const [userId] = await createUsers(1);
+
+    const result = await reserveVoucherForCheckout(voucher.code, BASE_AMOUNT, userId);
 
     // 50% of 100_000 would be 50_000, capped at maxDiscount.
     expect(result.discountAmount).toBe(20_000);
@@ -107,8 +125,9 @@ describe("reserveVoucherForCheckout", () => {
 
   it("refuses a checkout below minPurchase without reserving anything", async () => {
     const voucher = await createVoucher({ minPurchase: 200_000 });
+    const [userId] = await createUsers(1);
 
-    const result = await reserveVoucherForCheckout(voucher.code, BASE_AMOUNT, null);
+    const result = await reserveVoucherForCheckout(voucher.code, BASE_AMOUNT, userId);
 
     expect(result).toEqual({ discountAmount: 0, reservation: null });
     const updated = await prisma.voucher.findUniqueOrThrow({ where: { id: voucher.id } });
@@ -117,8 +136,9 @@ describe("reserveVoucherForCheckout", () => {
 
   it("refuses a checkout once the quota is already exhausted", async () => {
     const voucher = await createVoucher({ quota: 3, usedCount: 3 });
+    const [userId] = await createUsers(1);
 
-    const result = await reserveVoucherForCheckout(voucher.code, BASE_AMOUNT, null);
+    const result = await reserveVoucherForCheckout(voucher.code, BASE_AMOUNT, userId);
 
     expect(result).toEqual({ discountAmount: 0, reservation: null });
   });

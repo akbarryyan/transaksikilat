@@ -2,16 +2,21 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/src/infra/db/prisma";
 import { requireSellerSession } from "@/lib/seller";
+import { getMerchantPlatformFeeConfig } from "@/lib/site-config";
 
 export const dynamic = "force-dynamic";
 
+/**
+ * feeType and feeValue are absent on purpose: they are the platform's cut of
+ * the merchant's margin, so accepting them here let a merchant post their own
+ * fee. Both are filled from the platform setting below, and Zod drops them from
+ * the payload if a client still sends them.
+ */
 const SellerProductSchema = z.object({
   productId: z.string().min(1),
   sellingPrice: z.number().positive().optional(),
   commissionType: z.enum(["PERCENT", "FIXED"]).default("PERCENT"),
   commissionValue: z.number().min(0).max(1000000).default(0),
-  feeType: z.enum(["PERCENT", "FIXED"]).default("PERCENT"),
-  feeValue: z.number().min(0).max(1000000).default(0),
   isActive: z.boolean().optional(),
 });
 
@@ -134,12 +139,26 @@ export async function POST(req: NextRequest) {
 
   const product = await prisma.product.findUnique({
     where: { id: parsed.data.productId },
-    select: { id: true, isActive: true, stock: true },
+    select: { id: true, isActive: true, stock: true, providerPrice: true },
   });
 
   if (!product || !product.isActive || !product.stock) {
     return NextResponse.json({ success: false, error: "Produk tidak tersedia untuk seller" }, { status: 404 });
   }
+
+  // The same floor /api/merchant/pricing applies. Both endpoints write this
+  // row, so a price one of them refuses cannot be acceptable to the other.
+  if (
+    parsed.data.sellingPrice !== undefined &&
+    parsed.data.sellingPrice < Number(product.providerPrice)
+  ) {
+    return NextResponse.json(
+      { success: false, error: "Harga jual tidak boleh di bawah harga provider" },
+      { status: 422 }
+    );
+  }
+
+  const platformFee = await getMerchantPlatformFeeConfig();
 
   const sellerProduct = await prisma.sellerProduct.upsert({
     where: {
@@ -154,16 +173,16 @@ export async function POST(req: NextRequest) {
       sellingPrice: parsed.data.sellingPrice,
       commissionType: parsed.data.commissionType,
       commissionValue: parsed.data.commissionValue,
-      feeType: parsed.data.feeType,
-      feeValue: parsed.data.feeValue,
+      feeType: platformFee.type,
+      feeValue: platformFee.value,
       isActive: parsed.data.isActive ?? true,
     },
     update: {
       sellingPrice: parsed.data.sellingPrice,
       commissionType: parsed.data.commissionType,
       commissionValue: parsed.data.commissionValue,
-      feeType: parsed.data.feeType,
-      feeValue: parsed.data.feeValue,
+      feeType: platformFee.type,
+      feeValue: platformFee.value,
       isActive: parsed.data.isActive ?? true,
     },
   });

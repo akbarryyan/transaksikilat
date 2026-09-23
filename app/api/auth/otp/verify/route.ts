@@ -204,6 +204,9 @@ export async function POST(req: NextRequest) {
     } else {
       // --- Register: buat user baru ---
       // Ambil data registrasi dari body
+      // The address the code was sent to is the only one this OTP says anything
+      // about. Accepting a different one for the same field turned the whole
+      // check into theatre: verify your own inbox, register somebody else's.
       const regPhone = body.regPhone
         ? normalizePhone(body.regPhone)
         : target === "whatsapp"
@@ -214,6 +217,24 @@ export async function POST(req: NextRequest) {
         : target === "email"
         ? normalizedEmail
         : null;
+
+      const verifiedField =
+        target === "email"
+          ? { supplied: regEmail, verified: normalizedEmail, label: "Email" }
+          : { supplied: regPhone, verified: normalizedPhone, label: "Nomor WhatsApp" };
+
+      if (verifiedField.supplied !== verifiedField.verified) {
+        return NextResponse.json(
+          {
+            success: false,
+            message: `${verifiedField.label} yang didaftarkan harus sama dengan yang diverifikasi.`,
+          },
+          { status: 400 }
+        );
+      }
+
+      // The other field is whatever was typed in — there is no OTP path for it,
+      // so it is recorded as a contact detail, not as something proven.
 
       // Double-check belum terdaftar
       if (regPhone) {
