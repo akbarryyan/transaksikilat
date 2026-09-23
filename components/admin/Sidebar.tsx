@@ -143,6 +143,10 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                 icon: <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M3 6h18M3 14h18M3 18h18"/><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 14h.01"/></svg>,
               },
               {
+                name: "Withdraw", href: "/admin/seller-withdrawals",
+                icon: <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v12m0 0l-4-4m4 4l4-4M4 20h16"/></svg>,
+              },
+              {
                 name: "Pesan", href: "/admin/tickets",
                 icon: <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/></svg>,
               },
