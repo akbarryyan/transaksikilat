@@ -103,10 +103,20 @@ function OrderDetailPageContent() {
         cache: "no-store",
       });
       const data = await res.json();
-      if (data.success) {
+      // Older responses carried no access level; treat their absence as full so
+      // a rollout in progress never locks an owner out of their own order.
+      const access = data.access ?? "full";
+      if (data.success && access === "full") {
         setOrder(data.data as OrderDetail);
         setError(null);
         setActionError(null);
+      } else if (data.success) {
+        // The code is real, but this viewer is not entitled to what was bought.
+        // This page is the full detail view, so there is nothing to show here —
+        // /akun/pesanan carries the status-only summary.
+        setError(
+          "Detail pesanan ini hanya bisa dibuka oleh pemiliknya. Masuk ke akun yang memesan, atau buka tautan pesanan dari halaman checkout."
+        );
       } else {
         setError(data.error ?? "Pesanan tidak ditemukan.");
       }

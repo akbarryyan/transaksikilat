@@ -48,14 +48,17 @@ function StatusBadge({ status }: { status: string }) {
 interface OrderItem {
   orderCode: string;
   status: string;
-  amount: number;
-  fee: number;
-  paymentMethod: string;
-  serialNumber: string | null;
   createdAt: string;
   updatedAt: string;
   product: { name: string; brand: string; category: string };
-  paymentInvoice: {
+  // Everything below arrives only when the viewer is entitled to the order's
+  // contents. Looking a code up without being logged in as its owner — or
+  // without the guest link's token — returns progress and nothing more.
+  amount?: number;
+  fee?: number;
+  paymentMethod?: string;
+  serialNumber?: string | null;
+  paymentInvoice?: {
     status: string;
     method: string | null;
     paymentUrl: string | null;
@@ -63,6 +66,8 @@ interface OrderItem {
     paidAt: string | null;
   } | null;
 }
+
+type OrderAccess = "full" | "public";
 
 // ── Main Component ────────────────────────────────────────────────────────────
 function PesananPageContent() {
@@ -74,6 +79,7 @@ function PesananPageContent() {
 
   const [isLoggedIn, setIsLoggedIn] = useState<boolean | null>(null); // null = loading
   const [singleOrder, setSingleOrder] = useState<OrderItem | null>(null);
+  const [singleOrderAccess, setSingleOrderAccess] = useState<OrderAccess>("full");
   const [orders, setOrders] = useState<OrderItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -119,6 +125,7 @@ function PesananPageContent() {
       const data = await res.json();
       if (data.success) {
         setSingleOrder(data.data as OrderItem);
+        setSingleOrderAccess((data.access as OrderAccess) ?? "full");
       } else {
         setError(data.error ?? "Pesanan tidak ditemukan.");
       }
@@ -148,6 +155,7 @@ function PesananPageContent() {
       const data = await res.json();
       if (data.success) {
         setSingleOrder(data.data as OrderItem);
+        setSingleOrderAccess((data.access as OrderAccess) ?? "full");
       } else {
         setSearchError(data.error ?? "Pesanan tidak ditemukan.");
       }
@@ -202,28 +210,45 @@ function PesananPageContent() {
             <span className="text-xs text-slate-500">Brand</span>
             <span className="text-xs text-slate-600">{order.product.brand}</span>
           </div>
-          <div className="flex justify-between">
-            <span className="text-xs text-slate-500">Total Bayar</span>
-            <span className="text-sm font-bold text-slate-800">Rp {formatPrice(order.amount)}</span>
-          </div>
-          {order.fee > 0 && (
+          {typeof order.amount === "number" && (
             <div className="flex justify-between">
-              <span className="text-xs text-slate-500">Biaya Admin</span>
-              <span className="text-xs text-slate-600">Rp {formatPrice(order.fee)}</span>
+              <span className="text-xs text-slate-500">Total Bayar</span>
+              <span className="text-sm font-bold text-slate-800">Rp {formatPrice(order.amount)}</span>
             </div>
           )}
-          <div className="flex justify-between">
-            <span className="text-xs text-slate-500">Metode</span>
-            <span className="text-xs text-slate-600">
-              {order.paymentMethod === "WALLET" ? "Saldo Wallet" : (order.paymentInvoice?.method?.toUpperCase() ?? "Payment Gateway")}
-            </span>
-          </div>
+          {(order.fee ?? 0) > 0 && (
+            <div className="flex justify-between">
+              <span className="text-xs text-slate-500">Biaya Admin</span>
+              <span className="text-xs text-slate-600">Rp {formatPrice(order.fee!)}</span>
+            </div>
+          )}
+          {order.paymentMethod && (
+            <div className="flex justify-between">
+              <span className="text-xs text-slate-500">Metode</span>
+              <span className="text-xs text-slate-600">
+                {order.paymentMethod === "WALLET" ? "Saldo Wallet" : (order.paymentInvoice?.method?.toUpperCase() ?? "Payment Gateway")}
+              </span>
+            </div>
+          )}
           <div className="flex justify-between">
             <span className="text-xs text-slate-500">Waktu</span>
             <span className="text-xs text-slate-600">{formatDate(order.createdAt)}</span>
           </div>
         </div>
       </div>
+
+      {/* Looking a code up on its own shows progress only — the goods and the
+          payment details need proof that the order is yours. */}
+      {singleOrderAccess === "public" && (
+        <div className="bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3 flex gap-2.5">
+          <span className="text-amber-500 text-base">🔒</span>
+          <p className="text-[11px] text-amber-800 leading-relaxed">
+            Kamu melihat ringkasan status saja. Untuk melihat serial number dan detail
+            pembayaran, masuk ke akun pemilik pesanan atau buka tautan pesanan yang
+            dikirimkan saat checkout.
+          </p>
+        </div>
+      )}
 
       {/* Serial Number */}
       {order.serialNumber && (
@@ -303,7 +328,11 @@ function PesananPageContent() {
         orders.map((order) => (
           <button
             key={order.orderCode}
-            onClick={() => setSingleOrder(order)}
+            onClick={() => {
+              // Straight from the signed-in owner's own list.
+              setSingleOrder(order);
+              setSingleOrderAccess("full");
+            }}
             className="w-full bg-white rounded-2xl p-4 shadow-sm border border-slate-100 hover:border-purple-200 hover:shadow-md transition-all text-left"
           >
             <div className="flex items-start justify-between gap-2 mb-2">
@@ -315,7 +344,9 @@ function PesananPageContent() {
                 <p className="text-[11px] text-slate-400 font-mono">{order.orderCode}</p>
                 <p className="text-[10px] text-slate-400 mt-0.5">{formatDate(order.createdAt)}</p>
               </div>
-              <p className="text-sm font-bold text-slate-800">Rp {formatPrice(order.amount)}</p>
+              {typeof order.amount === "number" && (
+                <p className="text-sm font-bold text-slate-800">Rp {formatPrice(order.amount)}</p>
+              )}
             </div>
             {order.serialNumber && (
               <div className="mt-2 pt-2 border-t border-slate-100 flex items-center gap-1.5">
