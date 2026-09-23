@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
-import { getSession } from "@/lib/session";
+import { getRawSession } from "@/lib/session";
 import { getSiteName } from "@/lib/site-config";
 import { prisma } from "@/src/infra/db/prisma";
 import { normalizePhone, isValidPhone } from "@/lib/fonnte";
+import { BCRYPT_COST, validateNewPassword } from "@/lib/password-policy";
 
 export async function POST(req: NextRequest) {
   try {
@@ -41,11 +42,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    if (typeof password !== "string" || password.length < 6) {
-      return NextResponse.json(
-        { success: false, message: "Password minimal 6 karakter." },
-        { status: 400 }
-      );
+    const passwordProblem = validateNewPassword(password);
+    if (passwordProblem) {
+      return NextResponse.json({ success: false, message: passwordProblem }, { status: 400 });
     }
 
     if (password !== confirmPassword) {
@@ -82,7 +81,7 @@ export async function POST(req: NextRequest) {
     }
 
     // --- Hash password ---
-    const passwordHash = await bcrypt.hash(password, 10);
+    const passwordHash = await bcrypt.hash(password, BCRYPT_COST);
 
     // --- Buat user baru ---
     const newUser = await prisma.user.create({
@@ -100,17 +99,19 @@ export async function POST(req: NextRequest) {
         phone: true,
         name: true,
         role: true,
+        sessionVersion: true,
       },
     });
 
     // --- Auto-login setelah register ---
-    const session = await getSession();
+    const session = await getRawSession();
     session.isLoggedIn = true;
     session.userId = newUser.id;
     session.email = newUser.email ?? "";
     session.phone = newUser.phone ?? "";
     session.name = newUser.name ?? "";
     session.role = newUser.role;
+    session.sessionVersion = newUser.sessionVersion;
     await session.save();
 
     return NextResponse.json({

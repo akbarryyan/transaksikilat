@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/src/infra/db/prisma";
 import { normalizePhone, isValidPhone } from "@/lib/fonnte";
+import { revokeUserSessions } from "@/lib/session";
+import { BCRYPT_COST, validateNewPassword } from "@/lib/password-policy";
 
 export async function POST(req: NextRequest) {
   try {
@@ -31,11 +33,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    if (typeof newPassword !== "string" || newPassword.length < 8) {
-      return NextResponse.json(
-        { success: false, message: "Password baru minimal 8 karakter." },
-        { status: 400 }
-      );
+    const passwordProblem = validateNewPassword(newPassword);
+    if (passwordProblem) {
+      return NextResponse.json({ success: false, message: passwordProblem }, { status: 400 });
     }
 
     if (newPassword !== confirmPassword) {
@@ -157,12 +157,16 @@ export async function POST(req: NextRequest) {
     });
 
     // --- Update password ---
-    const passwordHash = await bcrypt.hash(newPassword, 10);
+    const passwordHash = await bcrypt.hash(newPassword, BCRYPT_COST);
 
     await prisma.user.update({
       where: { id: user.id },
       data: { passwordHash },
     });
+
+    // Nobody is signed in on this route, so every existing cookie goes —
+    // including whoever prompted the reset by taking the account over.
+    await revokeUserSessions(user.id);
 
     return NextResponse.json({
       success: true,

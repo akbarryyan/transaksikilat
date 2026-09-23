@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getSession } from "@/lib/session";
+import { getRawSession, getSession } from "@/lib/session";
 import { prisma } from "@/src/infra/db/prisma";
 import {
   clearFailedLogins,
@@ -81,6 +81,7 @@ export async function POST(req: Request) {
         role: true,
         passwordHash: true,
         isActive: true,
+        sessionVersion: true,
       },
     });
 
@@ -119,12 +120,13 @@ export async function POST(req: Request) {
     await clearFailedLogins(throttleKey);
 
     // Set session
-    const session = await getSession();
+    const session = await getRawSession();
     session.isLoggedIn = true;
     session.userId = user.id;
     session.email = user.email ?? "";
     session.name = user.name ?? "";
     session.role = user.role;
+    session.sessionVersion = user.sessionVersion;
     await session.save();
 
     return NextResponse.json({

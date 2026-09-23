@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
-import { getSession } from "@/lib/session";
+import { getRawSession } from "@/lib/session";
 import { getSiteName } from "@/lib/site-config";
 import { prisma } from "@/src/infra/db/prisma";
 import { normalizePhone, isValidPhone } from "@/lib/fonnte";
+import { BCRYPT_COST, validateNewPassword } from "@/lib/password-policy";
 
 export async function POST(req: NextRequest) {
   try {
@@ -44,11 +45,11 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    if (purpose === "REGISTER" && (typeof password !== "string" || password.length < 6)) {
-      return NextResponse.json(
-        { success: false, message: "Password minimal 6 karakter." },
-        { status: 400 }
-      );
+    if (purpose === "REGISTER") {
+      const passwordProblem = validateNewPassword(password);
+      if (passwordProblem) {
+        return NextResponse.json({ success: false, message: passwordProblem }, { status: 400 });
+      }
     }
 
     if (
@@ -181,6 +182,7 @@ export async function POST(req: NextRequest) {
           name: true,
           role: true,
           isActive: true,
+          sessionVersion: true,
         },
       });
 
@@ -245,7 +247,7 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      const passwordHash = await bcrypt.hash(password, 10);
+      const passwordHash = await bcrypt.hash(password, BCRYPT_COST);
 
       user = await prisma.user.create({
         data: {
@@ -262,18 +264,20 @@ export async function POST(req: NextRequest) {
           phone: true,
           name: true,
           role: true,
+          sessionVersion: true,
         },
       });
     }
 
     // --- Set session (auto-login) ---
-    const session = await getSession();
+    const session = await getRawSession();
     session.isLoggedIn = true;
     session.userId = user.id;
     session.email = user.email ?? "";
     session.phone = user.phone ?? "";
     session.name = user.name ?? "";
     session.role = user.role;
+    session.sessionVersion = user.sessionVersion ?? 0;
     await session.save();
 
     return NextResponse.json({
