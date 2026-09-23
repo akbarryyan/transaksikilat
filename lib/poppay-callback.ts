@@ -39,10 +39,30 @@ export interface PoppayCallbackResult {
   executeError?: string;
 }
 
-async function confirmCompletedViaInquiry(refId: string): Promise<boolean> {
+/**
+ * Verifies settlement against the gateway reference *we* stored when the
+ * payment was created — never the refid the callback supplied.
+ *
+ * A callback can name any refid it likes, including one belonging to a real,
+ * settled payment for an entirely different transaction. Asking the gateway
+ * "is this refid paid?" therefore proves nothing about the record the callback
+ * claims to settle: one genuine receipt would vouch for unlimited unpaid
+ * top-ups and orders. Asking about our own reference is what ties the proof to
+ * the record.
+ *
+ * Fails closed when there is no stored reference to verify against.
+ */
+async function confirmCompletedViaInquiry(storedRefId: string): Promise<boolean> {
+  if (!storedRefId.trim()) {
+    console.warn(
+      "[Poppay Callback] No stored gateway reference for this record; refusing to settle it."
+    );
+    return false;
+  }
+
   try {
     const client = new PoppayClient();
-    const inquiry = await client.inquireIncoming(refId);
+    const inquiry = await client.inquireIncoming(storedRefId);
     return inquiry.status === "completed";
   } catch (error) {
     console.error("[Poppay Callback] Inquiry verification failed:", error);
@@ -315,7 +335,6 @@ async function handlePoppayTopup(
       data: {
         status: terminalStatus,
         paymentMethod: topup.paymentMethod ?? "qris",
-        invoiceId: topup.invoiceId ?? payload.refid,
       },
     });
 
@@ -325,7 +344,7 @@ async function handlePoppayTopup(
     };
   }
 
-  const inquiryConfirmed = await confirmCompletedViaInquiry(payload.refid);
+  const inquiryConfirmed = await confirmCompletedViaInquiry(topup.invoiceId ?? "");
   if (!inquiryConfirmed) {
     return { action: "inquiry_mismatch", topupId: topup.id };
   }
@@ -340,7 +359,6 @@ async function handlePoppayTopup(
       data: {
         status: "COMPLETED",
         paymentMethod: "qris",
-        invoiceId: topup.invoiceId ?? payload.refid,
         paidAt,
         fee: Number(topup.fee ?? 0),
         totalPayment: Number(topup.totalPayment ?? topup.amount),
@@ -394,6 +412,11 @@ async function handlePoppayOrder(
     return { action: "not_found" };
   }
 
+  // Read before the invoice row is touched below: this is the reference the
+  // gateway handed us when the payment was created, and the only one that can
+  // vouch for *this* order.
+  const storedInvoiceId = order.paymentInvoice?.invoiceId?.trim() ?? "";
+
   if (
     order.status === OrderStatus.PAID ||
     order.status === OrderStatus.PROCESSING_PROVIDER ||
@@ -413,7 +436,6 @@ async function handlePoppayOrder(
     await prisma.paymentInvoice.update({
       where: { id: order.paymentInvoice.id },
       data: {
-        invoiceId: order.paymentInvoice.invoiceId || payload.refid,
         method: order.paymentInvoice.method ?? "qris",
         status: invoiceStatus,
         paidAt: invoiceStatus === InvoiceStatus.PAID ? paidAt : order.paymentInvoice.paidAt,
@@ -432,7 +454,7 @@ async function handlePoppayOrder(
     };
   }
 
-  const inquiryConfirmed = await confirmCompletedViaInquiry(payload.refid);
+  const inquiryConfirmed = await confirmCompletedViaInquiry(storedInvoiceId);
   if (!inquiryConfirmed) {
     return { action: "inquiry_mismatch", orderId: order.id };
   }
