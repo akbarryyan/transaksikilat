@@ -244,7 +244,15 @@ export default function TransaksiPage() {
         return;
       }
 
-      router.push(`/akun/pesanan/${encodeURIComponent(code)}`);
+      // Someone looking a bare code up is usually not its owner, and the detail
+      // page has nothing to show them. Send them to the summary instead, which
+      // renders the status-only view; owners still get the full page.
+      const access = data.access ?? "full";
+      router.push(
+        access === "full"
+          ? `/akun/pesanan/${encodeURIComponent(code)}`
+          : `/akun/pesanan?orderCode=${encodeURIComponent(code)}`
+      );
     } catch {
       setGuestSearchError("Gagal mencari pesanan. Coba lagi sebentar.");
     } finally {
