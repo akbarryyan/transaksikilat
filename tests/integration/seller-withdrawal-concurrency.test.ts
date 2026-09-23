@@ -61,6 +61,21 @@ function withdrawalRequest(amount: number): NextRequest {
   });
 }
 
+/** A seller past the first-payout review gate, so payouts go straight out. */
+async function seedReviewedWithdrawal(userId: string) {
+  await prisma.sellerWithdrawalRequest.create({
+    data: {
+      userId,
+      amount: 1,
+      status: "PAID",
+      accountName: "Seller Subject",
+      accountNumber: "1234567890",
+      bankName: "BCA",
+      payoutGateway: "POPPAY",
+    },
+  });
+}
+
 describe("seller withdrawals under concurrency", () => {
   beforeEach(async () => {
     await resetDatabase();
@@ -69,6 +84,7 @@ describe("seller withdrawals under concurrency", () => {
 
   it("pays out only what the seller actually has when requests land at once", async () => {
     const userId = await createSeller(BALANCE);
+    await seedReviewedWithdrawal(userId);
 
     const responses = await Promise.all(
       Array.from({ length: CONCURRENCY }, () =>
@@ -87,6 +103,29 @@ describe("seller withdrawals under concurrency", () => {
     expect(accepted).toHaveLength(1);
     expect(payout.calls).toBe(1);
     expect(approved).toBe(1);
+    expect(Number(wallet.balance)).toBe(0);
+  });
+  it("holds only what the seller actually has when a first payout lands at once", async () => {
+    // Same guarantee on the review path: the money is set aside once, so a
+    // burst of requests cannot queue the same balance ten times over and leave
+    // an admin ten payouts to approve.
+    const userId = await createSeller(BALANCE);
+
+    const responses = await Promise.all(
+      Array.from({ length: CONCURRENCY }, () =>
+        requestWithdrawal(withdrawalRequest(BALANCE))
+      )
+    );
+
+    const accepted = responses.filter((response) => response.status === 200);
+    const pending = await prisma.sellerWithdrawalRequest.count({
+      where: { userId, status: "PENDING" },
+    });
+    const wallet = await prisma.wallet.findUniqueOrThrow({ where: { userId } });
+
+    expect(accepted).toHaveLength(1);
+    expect(pending).toBe(1);
+    expect(payout.calls).toBe(0);
     expect(Number(wallet.balance)).toBe(0);
   });
 });

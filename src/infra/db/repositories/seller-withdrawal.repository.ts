@@ -41,6 +41,18 @@ export class SellerWithdrawalRepository {
   }
 
   /**
+   * True once one of this seller's payouts has been submitted to the gateway,
+   * which only happens after an admin has approved one. Used to decide whether
+   * a new request can go straight out or has to wait for review.
+   */
+  async hasReviewedWithdrawal(userId: string): Promise<boolean> {
+    const count = await prisma.sellerWithdrawalRequest.count({
+      where: { userId, status: { in: ["APPROVED", "PAID"] } },
+    });
+    return count > 0;
+  }
+
+  /**
    * Debits the wallet and creates the withdrawal request + HOLD ledger entry in
    * one transaction. The debit is a conditional UPDATE guarded on the balance
    * still covering the amount, so simultaneous withdrawals cannot each read the
@@ -48,9 +60,7 @@ export class SellerWithdrawalRepository {
    * Returns null (rolling back everything, including an auto-created wallet)
    * when the balance does not cover the amount.
    */
-  async createHold(
-    input: CreateHoldInput
-  ): Promise<{ id: string; amount: Prisma.Decimal } | null> {
+  async createHold(input: CreateHoldInput) {
     return prisma.$transaction(async (tx) => {
       let wallet = await tx.wallet.findUnique({ where: { userId: input.userId } });
       if (!wallet) {
