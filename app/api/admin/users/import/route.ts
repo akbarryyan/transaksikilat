@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import * as XLSX from "xlsx";
 import { prisma } from "@/src/infra/db/prisma";
 import { requireAdminSession } from "@/lib/admin";
+import { BCRYPT_COST, MIN_PASSWORD_LENGTH, validateNewPassword } from "@/lib/password-policy";
 
 export const dynamic = "force-dynamic";
 
@@ -155,9 +156,12 @@ export async function POST(request: Request) {
         continue;
       }
 
-      if (!password || password.length < 6) {
+      const passwordProblem = validateNewPassword(password);
+      if (passwordProblem) {
         skippedCount++;
-        results.push(`Baris ${rowNumber}: dilewati karena password minimal 6 karakter wajib diisi.`);
+        results.push(
+          `Baris ${rowNumber}: dilewati karena password tidak memenuhi syarat (minimal ${MIN_PASSWORD_LENGTH} karakter, bukan password umum).`
+        );
         continue;
       }
 
@@ -213,7 +217,7 @@ export async function POST(request: Request) {
         };
       }
 
-      const passwordHash = await bcrypt.hash(password, 10);
+      const passwordHash = await bcrypt.hash(password, BCRYPT_COST);
 
       await prisma.user.create({
         data: {

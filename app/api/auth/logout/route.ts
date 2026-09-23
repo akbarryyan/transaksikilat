@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
-import { getSession } from "@/lib/session";
+import { getRawSession } from "@/lib/session";
 
 export async function POST() {
   try {
-    const session = await getSession();
+    const session = await getRawSession();
     session.destroy();
 
     return NextResponse.json({

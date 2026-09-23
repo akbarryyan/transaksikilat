@@ -107,6 +107,10 @@ model User {
   role         String   @default("MEMBER") // MEMBER, ADMIN — access control
   tierId       String? // FK to UserTier — pricing tier (null = use default tier)
   isActive     Boolean  @default(true)
+  // Bumped whenever every existing session for this account must stop working —
+  // a password change or reset. Sessions carry the value they were issued with,
+  // so anything older than this is refused.
+  sessionVersion Int    @default(0)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 

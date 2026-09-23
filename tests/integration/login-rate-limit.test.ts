@@ -1,7 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import bcrypt from "bcryptjs";
 
+// Login establishes a session rather than consuming one, so it reaches for the
+// raw cookie; the admin route also verifies sessions on its GET.
 vi.mock("@/lib/session", () => ({
+  getRawSession: async () => ({ save: async () => {} }),
   getSession: async () => ({ save: async () => {} }),
 }));
 

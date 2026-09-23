@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
-import { getSession } from "@/lib/session";
+import { getRawSession } from "@/lib/session";
 import { prisma } from "@/src/infra/db/prisma";
 import { normalizePhone, isValidPhone } from "@/lib/fonnte";
 import {
@@ -63,6 +63,7 @@ export async function POST(req: NextRequest) {
           role: true,
           passwordHash: true,
           isActive: true,
+          sessionVersion: true,
         },
       });
     } else {
@@ -88,6 +89,7 @@ export async function POST(req: NextRequest) {
           role: true,
           passwordHash: true,
           isActive: true,
+          sessionVersion: true,
         },
       });
     }
@@ -145,13 +147,14 @@ export async function POST(req: NextRequest) {
     await clearFailedLogins(throttleKey);
 
     // Login selalu langsung tanpa OTP
-    const session = await getSession();
+    const session = await getRawSession();
     session.isLoggedIn = true;
     session.userId = user.id;
     session.email = user.email ?? "";
     session.phone = user.phone ?? "";
     session.name = user.name ?? "";
     session.role = user.role;
+    session.sessionVersion = user.sessionVersion;
     await session.save();
 
     return NextResponse.json({

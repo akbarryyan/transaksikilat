@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
-import { getSession } from "@/lib/session";
+import { getSession, revokeUserSessions } from "@/lib/session";
+import { BCRYPT_COST, validateNewPassword } from "@/lib/password-policy";
 import { prisma } from "@/src/infra/db/prisma";
 
 export async function POST(req: NextRequest) {
@@ -25,11 +26,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    if (typeof newPassword !== "string" || newPassword.length < 6) {
-      return NextResponse.json(
-        { success: false, message: "Password baru minimal 6 karakter." },
-        { status: 400 }
-      );
+    const passwordProblem = validateNewPassword(newPassword);
+    if (passwordProblem) {
+      return NextResponse.json({ success: false, message: passwordProblem }, { status: 400 });
     }
 
     // Ambil user dengan passwordHash
@@ -64,15 +63,22 @@ export async function POST(req: NextRequest) {
     }
 
     // Hash dan simpan password baru
-    const newHash = await bcrypt.hash(newPassword, 10);
+    const newHash = await bcrypt.hash(newPassword, BCRYPT_COST);
     await prisma.user.update({
       where: { id: session.userId },
       data: { passwordHash: newHash },
     });
 
+    // Changing a password is what someone does after their account is taken
+    // over, so every cookie already out there has to stop working — otherwise
+    // the intruder keeps their access for the rest of the week. The browser
+    // doing the change carries the new version forward so it stays signed in.
+    session.sessionVersion = await revokeUserSessions(session.userId);
+    await session.save();
+
     return NextResponse.json({
       success: true,
-      message: "Password berhasil diubah.",
+      message: "Password berhasil diubah. Sesi lain di perangkat lain sudah dikeluarkan.",
     });
   } catch (error) {
     console.error("[CHANGE PASSWORD ERROR]", error);
