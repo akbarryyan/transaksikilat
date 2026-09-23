@@ -164,8 +164,8 @@ export default function MerchantProductsPage() {
           sellingPrice: row.sellingPrice + extraMargin,
           commissionType: "FIXED",
           commissionValue: 0,
-          feeType: row.sellerProduct?.feeType ?? "FIXED",
-          feeValue: row.sellerProduct?.feeValue ?? 0,
+          // Platform fee is set server-side from the platform setting; sending
+          // it from here only echoed back whatever the API last returned.
           isActive: true,
         }),
       });

@@ -2,12 +2,28 @@ import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { getRawSession } from "@/lib/session";
 import { getSiteName } from "@/lib/site-config";
+import { isRegisterOtpRequired } from "@/lib/auth-config";
 import { prisma } from "@/src/infra/db/prisma";
 import { normalizePhone, isValidPhone } from "@/lib/fonnte";
 import { BCRYPT_COST, validateNewPassword } from "@/lib/password-policy";
 
 export async function POST(req: NextRequest) {
   try {
+    // This route creates an account from a form alone, with nothing proving the
+    // address belongs to whoever filled it in. That is fine only while email
+    // verification is switched off — the sign-up form calls the OTP flow
+    // instead when it is on, so anything arriving here meanwhile came from
+    // outside the app and would be handing itself an unverified address.
+    if (await isRegisterOtpRequired()) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Pendaftaran harus melalui verifikasi kode OTP email.",
+        },
+        { status: 403 }
+      );
+    }
+
     const siteName = await getSiteName();
     const body = await req.json();
     const { name, email, phone, password, confirmPassword } = body;

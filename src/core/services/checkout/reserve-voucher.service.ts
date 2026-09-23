@@ -56,6 +56,14 @@ export async function reserveVoucherForCheckout(
 ): Promise<VoucherReservationResult> {
   if (!code) return NO_DISCOUNT;
 
+  // Every limit on a voucher — per-user, already-used — is enforced through the
+  // claim row, and VoucherClaim.userId is required, so a guest has none. The
+  // checks below were therefore skipped entirely for guests, leaving one person
+  // free to spend the same code until the quota ran out, or without limit when
+  // the voucher has no quota at all. Codes are not secret either: /api/vouchers
+  // lists every active one to anybody who asks.
+  if (!userId) return NO_DISCOUNT;
+
   const voucher = await prisma.voucher.findUnique({ where: { code: code.toUpperCase() } });
   if (!voucher || !voucher.isActive) return NO_DISCOUNT;
 
