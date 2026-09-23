@@ -46,6 +46,17 @@ function adminRequest(password: string): Request {
   });
 }
 
+const MAX_ATTEMPTS_PER_IP = 20;
+
+/** A login attempt for an account that does not exist, from a chosen IP. */
+function strangerRequest(identifier: string, ip: string): Request {
+  return new Request("http://localhost/api/auth/login", {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-forwarded-for": ip },
+    body: JSON.stringify({ identifier, password: WRONG_PASSWORD, method: "email" }),
+  });
+}
+
 async function attempt(
   login: (request: never) => Promise<Response>,
   request: Request
@@ -98,5 +109,34 @@ describe("login brute-force throttling", () => {
     }
 
     expect(await attempt(adminLogin, adminRequest(PASSWORD))).toBe(429);
+  });
+  it("locks a source IP that works through many accounts, not just one", async () => {
+    // Spreading guesses across identifiers keeps every per-identifier counter
+    // under its limit — the per-IP ceiling is the only thing that stops a
+    // sweep through a list of emails.
+    await createUser("MEMBER");
+
+    for (let i = 0; i < MAX_ATTEMPTS_PER_IP; i += 1) {
+      expect(
+        await attempt(memberLogin, strangerRequest(`sweep-${i}@example.test`, "198.51.100.4"))
+      ).toBe(401);
+    }
+
+    // A fresh identifier from that IP is refused even though it has no
+    // failures of its own.
+    expect(
+      await attempt(memberLogin, strangerRequest("belum-pernah@example.test", "198.51.100.4"))
+    ).toBe(429);
+  });
+
+  it("does not punish a different IP for that sweep", async () => {
+    await createUser("MEMBER");
+
+    for (let i = 0; i < MAX_ATTEMPTS_PER_IP; i += 1) {
+      await attempt(memberLogin, strangerRequest(`sweep-${i}@example.test`, "198.51.100.4"));
+    }
+
+    // The real user behind another address still gets in.
+    expect(await attempt(memberLogin, memberRequest(PASSWORD))).toBe(200);
   });
 });

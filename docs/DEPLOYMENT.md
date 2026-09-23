@@ -15,14 +15,113 @@ VPS (/var/www/transaksikilat)  --docker compose pull & up-d-->  container jalan
 
 Registry: `ghcr.io/akbarryyan/transaksikilat` (private).
 
+## Test sebelum deploy
+
+`npm run verify` adalah gate rilis: typecheck, lint, lalu seluruh test suite.
+Selama CI belum jalan (lihat "Gate test" di bawah), ini satu-satunya pelindung
+yang aktif — jangan build image kalau merah.
+
+### Sekali saja per mesin: siapkan database test
+
+Test integrasi jalan terhadap MySQL sungguhan, bukan mock. Itu yang membuatnya
+bisa membuktikan hal-hal yang tidak bisa dibuktikan dengan mock — misalnya dua
+permintaan withdraw bersamaan hanya menghasilkan satu payout, atau callback
+pembayaran yang sama tiba dua kali hanya mengkredit saldo sekali.
+
+Konsekuensinya: **setiap run men-truncate seluruh tabel**. Karena itu
+`tests/setup/env.ts` menolak jalan kalau nama database tidak berakhiran
+`_test`.
+
+Urutan sumber `DATABASE_URL`:
+
+1. `DATABASE_URL` yang sudah ada di environment — ini yang dipakai CI
+2. `.env.test` kalau filenya ada
+3. `.env.local`, dengan `_test` ditambahkan otomatis ke nama database-nya
+
+Cara paling jelas adalah bikin `.env.test` sendiri (sudah tercakup `.gitignore`):
+
+```bash
+cd ~/Kerjaan/repository/transaksikilat
+
+# 1. Buat databasenya
+mysql -u <user> -p -e "CREATE DATABASE IF NOT EXISTS transaksikilat_test"
+
+# 2. Tulis .env.test — samakan user/password dengan .env.local,
+#    hanya nama database yang berbeda
+cat > .env.test <<'ENV'
+DATABASE_URL="mysql://<user>:<password>@127.0.0.1:3306/transaksikilat_test"
+ENV
+
+# 3. Pasang skemanya
+dotenv -e .env.test -- npx prisma migrate deploy
+```
+
+`SESSION_SECRET` tidak perlu diisi — suite memakai nilai bawaan kalau kosong.
+
+### Menjalankan
+
+```bash
+npm run verify        # gate rilis: typecheck + lint + seluruh test
+npm test              # test saja
+npm run test:watch    # sambil menulis kode
+npx vitest run tests/integration/session-revocation.test.ts   # satu file
+```
+
+Suite penuh memakan waktu sekitar satu menit. Itu wajar: test integrasi berbagi
+satu database, jadi file dijalankan berurutan (`fileParallelism: false` di
+`vitest.config.ts`) supaya pembersihan satu file tidak menghapus fixture file
+lain di tengah jalan.
+
+Satu baris `ENOTDIR ... /tmp/logger-test-*/not-a-directory/sub` di output itu
+normal — ada test yang memang sengaja memaksa `initFileLogging` gagal membuat
+direktori.
+
+### Kalau rilisnya menambah migration
+
+**Database test tidak ikut ter-migrate sendiri.** Kalau lupa, test akan gagal
+dengan keluhan kolom yang tidak ada, dan gampang disalahartikan sebagai kode
+yang rusak:
+
+```bash
+dotenv -e .env.test -- npx prisma migrate deploy
+```
+
+Cek apakah sebuah rilis menambah migration:
+
+```bash
+git diff --name-only <sha-terakhir-dideploy>..HEAD -- prisma/migrations
+```
+
+Kalau iya, database production juga butuh langkah tambahan saat deploy — lihat
+"Deploy ke VPS" di bawah.
+
+### Apa yang dibuktikan suite ini
+
+Supaya hijau bukan sekadar hijau, ini area yang benar-benar dijaga:
+
+| Area | Contoh yang dikunci |
+| --- | --- |
+| Pembayaran | Callback gateway diverifikasi terhadap referensi yang kita simpan, bukan yang dikirim callback; callback kembar hanya mengkredit sekali |
+| Akses data | Satu akun tidak bisa membaca atau mengubah tiket, top-up, order, atau order merchant milik akun lain; kode order tidak membuka isi pesanan |
+| Sesi | Ganti password mematikan sesi lain tapi tidak sesi yang melakukannya; sesi lama sebelum fitur ini tetap berlaku |
+| Uang | Fee gateway dan markup tier dihitung konsisten; saldo tidak bisa ditarik dua kali oleh permintaan bersamaan |
+| Admin | Setiap handler di `app/api/admin/**` disapu otomatis dan harus menolak non-admin — route baru ikut terjaga tanpa perlu diingat, kecuali didaftarkan sebagai publik dengan alasan tertulis. Kredensial provider juga tidak ikut terkirim ke browser |
+| Upload | Folder di luar daftar ditolak, konten yang menyamar sebagai gambar ditolak, nama file dari klien tidak dipakai |
+| Rate limit | Login gagal berulang terkunci per identifier dan per IP |
+
+Yang **tidak** dicakup dan tetap perlu dicek manual setelah deploy: tampilan UI,
+pengiriman email/WhatsApp sungguhan, dan panggilan nyata ke Poppay, Digiflazz,
+serta VIP Reseller — semuanya di-mock di test.
+
 ## Status saat ini: build manual dari laptop
 
 Akun GitHub sedang **locked karena masalah billing**, jadi workflow `.github/workflows/build-and-push.yml` belum bisa jalan otomatis (job langsung gagal sebelum dapat runner). Selama ini belum beres, build dilakukan manual dari laptop yang punya akses internet penuh — **bukan** dari VPS, dan **bukan** dari environment yang dibatasi jaringan (mis. sandbox tanpa akses ke `dl-cdn.alpinelinux.org`).
 
 ### Build & push dari laptop
 
-Jalankan gate-nya dulu. `npm run verify` menjalankan typecheck, lint, dan
-seluruh test suite — jangan build image kalau ini merah.
+Jalankan gate-nya dulu — jangan build image kalau ini merah. Kalau ini pertama
+kalinya di mesin ini, database test perlu disiapkan sekali: lihat
+"[Test sebelum deploy](#test-sebelum-deploy)".
 
 ```bash
 cd ~/Kerjaan/repository/transaksikilat
@@ -86,7 +185,35 @@ Login GHCR di VPS (sekali saja, token cukup scope `read:packages`):
 echo "<PAT_READ_PACKAGES>" | docker login ghcr.io -u akbarryyan --password-stdin
 ```
 
-Lalu smoke test: buka domain production, cek halaman utama, login, dan minimal satu alur transaksi.
+### Smoke test setelah deploy
+
+Test suite tidak menyentuh UI, email, maupun gateway sungguhan, jadi bagian itu
+dicek tangan. Urutannya dari yang paling murah ke yang paling mahal:
+
+1. **Halaman utama terbuka** dan produk tampil — membuktikan container naik dan
+   database terbaca.
+2. **Login dengan akun yang sudah ada.** Ini yang paling sering rusak setelah
+   perubahan sesi atau password. Pastikan akun lama masih bisa masuk dengan
+   password lamanya, termasuk yang pendek.
+3. **Sesi yang sudah berjalan masih hidup.** Biarkan satu browser tetap login
+   sebelum deploy, lalu muat ulang sesudahnya — tidak boleh ter-logout.
+4. **Panel admin terbuka** dan datanya terisi.
+5. **Satu alur transaksi sungguhan** dengan nominal terkecil: checkout → bayar →
+   pastikan order jadi `SUCCESS` dan serial number muncul. Ini satu-satunya cara
+   membuktikan jalur Poppay dan provider masih nyambung.
+
+Kalau rilisnya menyentuh pembayaran, sesi, atau otorisasi, tambahkan
+pengecekan spesifik untuk perubahan itu — jangan andalkan langkah 1–4 saja.
+
+Cek juga log beberapa menit pertama:
+
+```bash
+docker compose logs --tail=50 transaksikilat-app
+tail -f /var/www/transaksikilat/logs/app.log
+```
+
+Kalau ada yang gagal, rollback lebih cepat daripada memperbaiki di tempat —
+lihat "[Rollback](#rollback)".
 
 ## Cron: rekonsiliasi order menggantung
 
@@ -206,11 +333,13 @@ hanya berjalan kalau `verify` hijau. Jadi image tidak akan pernah sampai ke
 registry dari kode yang test-nya merah.
 
 Selama akun GitHub masih locked, gate itu tidak pernah jalan — karena itu
-`npm run verify` di langkah build manual di atas adalah satu-satunya
-pelindung yang aktif sekarang.
+`npm run verify` dari laptop adalah satu-satunya pelindung yang aktif sekarang.
+Cara menjalankannya dan cara menyiapkan database test: lihat
+"[Test sebelum deploy](#test-sebelum-deploy)".
 
-`npm run verify` menjalankan tiga hal: typecheck, lint, lalu seluruh test.
-Ketiganya harus hijau sebelum image dibangun.
+CI membuat database test sendiri lewat service container MySQL dan menjalankan
+`npx prisma migrate deploy` sebelum `npm run verify`, jadi tidak ada langkah
+manual di sana.
 
 ## Setelah akun GitHub tidak locked lagi
 
