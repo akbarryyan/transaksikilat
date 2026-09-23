@@ -118,4 +118,53 @@ describe("admin approve withdrawal — bank code resolution", () => {
     });
     expect(stillPending.status).toBe("PENDING");
   });
+  it("returns the held money to the merchant when the request is rejected", async () => {
+    const withdrawal = await createPendingWithdrawal("Bank Central Asia");
+
+    const res = await approveWithdrawal(
+      patchRequest({ status: "REJECTED", processedNote: "Rekening tidak cocok" }),
+      { params: Promise.resolve({ id: withdrawal.id }) }
+    );
+
+    expect(res.status).toBe(200);
+    expect(payoutCalls.items).toHaveLength(0);
+
+    const settled = await prisma.sellerWithdrawalRequest.findUniqueOrThrow({
+      where: { id: withdrawal.id },
+    });
+    expect(settled.status).toBe("REJECTED");
+    expect(settled.processedNote).toBe("Rekening tidak cocok");
+
+    // The hold was taken at request time, so rejecting has to give it back.
+    const wallet = await prisma.wallet.findUniqueOrThrow({
+      where: { userId: withdrawal.userId },
+    });
+    expect(Number(wallet.balance)).toBe(75_000);
+
+    const ledger = await prisma.ledgerEntry.findMany({
+      where: { walletId: wallet.id, reference: withdrawal.id },
+    });
+    expect(ledger.map((e) => e.type)).toEqual(["WITHDRAW_RELEASE"]);
+  });
+
+  it("refuses to reject a payout already submitted to the gateway", async () => {
+    const withdrawal = await createPendingWithdrawal("Bank Central Asia");
+    await prisma.sellerWithdrawalRequest.update({
+      where: { id: withdrawal.id },
+      data: { status: "APPROVED" },
+    });
+
+    const res = await approveWithdrawal(
+      patchRequest({ status: "REJECTED" }),
+      { params: Promise.resolve({ id: withdrawal.id }) }
+    );
+
+    expect(res.status).toBe(400);
+
+    // Money must not come back while it is on its way out.
+    const wallet = await prisma.wallet.findUniqueOrThrow({
+      where: { userId: withdrawal.userId },
+    });
+    expect(Number(wallet.balance)).toBe(0);
+  });
 });
