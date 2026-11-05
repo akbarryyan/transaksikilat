@@ -20,6 +20,20 @@ import { requireAdminSession } from "@/lib/admin";
 
 export const dynamic = "force-dynamic";
 
+/**
+ * Credentials the admin UI may overwrite but never read back. The browser
+ * only learns whether each one is configured.
+ */
+const SECRET_KEYS = [
+  "POPPAY_INTEGRATOR_TOKEN",
+  "POPPAY_SECRET_KEY",
+  "POPPAY_PASSWORD",
+] as const;
+
+function isSecretKey(key: string): boolean {
+  return (SECRET_KEYS as readonly string[]).includes(key);
+}
+
 export async function GET() {
   const auth = await requireAdminSession();
   if ("error" in auth) {
@@ -34,10 +48,18 @@ export async function GET() {
     getAllProviderModes(),
   ]);
 
+  const secretsConfigured = Object.fromEntries(
+    SECRET_KEYS.map((key) => [key, Boolean(raw[key] || process.env[key])])
+  );
+  const safeRaw = Object.fromEntries(
+    Object.entries(raw).filter(([key]) => !isSecretKey(key))
+  );
+
   return NextResponse.json({
     success: true,
     data: {
-      raw,          // all raw key→value pairs
+      raw: safeRaw, // raw key→value pairs, minus credentials
+      secretsConfigured,
       modes,        // effective resolved modes (DB > env > default)
       envDefaults: {
         PROVIDER_DIGIFLAZZ_MODE: process.env.PROVIDER_DIGIFLAZZ_MODE ?? "mock",
@@ -47,12 +69,9 @@ export async function GET() {
         POPPAY_URL: process.env.POPPAY_URL ?? "",
         POPPAY_PORT: process.env.POPPAY_PORT ?? "",
         POPPAY_VERSION: process.env.POPPAY_VERSION ?? "",
-        POPPAY_INTEGRATOR_TOKEN: process.env.POPPAY_INTEGRATOR_TOKEN ?? "",
         POPPAY_AGGREGATOR_CODE: process.env.POPPAY_AGGREGATOR_CODE ?? "",
         POPPAY_MERCHANT_ACCOUNT_NUMBER: process.env.POPPAY_MERCHANT_ACCOUNT_NUMBER ?? "",
-        POPPAY_SECRET_KEY: process.env.POPPAY_SECRET_KEY ?? "",
         POPPAY_EMAIL: process.env.POPPAY_EMAIL ?? "",
-        POPPAY_PASSWORD: process.env.POPPAY_PASSWORD ?? "",
         PAYMENT_GATEWAY_QRIS_FEE_TYPE: process.env.PAYMENT_GATEWAY_QRIS_FEE_TYPE ?? "FIXED",
         PAYMENT_GATEWAY_QRIS_FEE_VALUE: process.env.PAYMENT_GATEWAY_QRIS_FEE_VALUE ?? "0",
         MERCHANT_PLATFORM_FEE_TYPE: process.env.MERCHANT_PLATFORM_FEE_TYPE ?? "FIXED",
@@ -69,9 +88,17 @@ export async function GET() {
   });
 }
 
+// site_configs.value is a MySQL TEXT column (65,535 bytes) and key is the
+// primary key. Anything larger makes Prisma throw, which surfaced as a 500.
+const MAX_VALUE_BYTES = 65_535;
+
 const PatchSchema = z.object({
-  key: z.string().min(1),
-  value: z.string(),  // allow empty — empty value will delete the key (revert to .env default)
+  key: z.string().min(1).max(191),
+  value: z
+    .string()
+    .refine((v) => Buffer.byteLength(v, "utf8") <= MAX_VALUE_BYTES, {
+      message: `value must be at most ${MAX_VALUE_BYTES} bytes`,
+    }), // allow empty — empty value will delete the key (revert to .env default)
 });
 
 export async function PATCH(request: Request) {
@@ -117,7 +144,12 @@ export async function PATCH(request: Request) {
   await initProviderModesFromDB();
 
   const modes = await getAllProviderModes();
-  return NextResponse.json({ success: true, data: { key: parsed.data.key, value: parsed.data.value, modes } });
+  return NextResponse.json({ success: true, data: {
+      key: parsed.data.key,
+      // Never echo a credential back, even to the admin who just typed it.
+      ...(isSecretKey(parsed.data.key) ? {} : { value: parsed.data.value }),
+      modes,
+    } });
 }
 
 export async function DELETE(request: Request) {

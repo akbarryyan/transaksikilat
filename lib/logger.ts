@@ -1,5 +1,11 @@
-import fs from "node:fs";
-import path from "node:path";
+import type * as FsType from "node:fs";
+import type * as PathType from "node:path";
+
+// Loaded at runtime instead of imported: Next compiles instrumentation.ts for
+// the edge runtime too, and webpack fails there on a static `fs`/`node:fs`
+// import even though initFileLogging only ever runs under Node.
+const fs = process.getBuiltinModule("fs") as typeof FsType;
+const path = process.getBuiltinModule("path") as typeof PathType;
 
 /**
  * Mirrors console output into a file on disk so logs survive independently
@@ -27,7 +33,16 @@ function formatArg(value: unknown): string {
   }
 }
 
-export function initFileLogging(logDir: string = process.env.LOG_DIR || "/app/logs"): void {
+// /app/logs only exists inside the Docker image (compose also sets LOG_DIR);
+// anywhere else fall back to ./logs so local dev doesn't hit EACCES.
+function defaultLogDir(): string {
+  if (process.env.LOG_DIR) return process.env.LOG_DIR;
+  return process.env.NODE_ENV === "production"
+    ? "/app/logs"
+    : path.join(process.cwd(), "logs");
+}
+
+export function initFileLogging(logDir: string = defaultLogDir()): void {
   if (initialized) return;
 
   try {

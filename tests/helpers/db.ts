@@ -15,12 +15,20 @@ export async function resetDatabase(): Promise<void> {
       AND table_name <> '_prisma_migrations'
   `;
 
-  await prisma.$executeRawUnsafe("SET FOREIGN_KEY_CHECKS = 0");
-  try {
-    for (const { table_name } of rows) {
-      await prisma.$executeRawUnsafe(`TRUNCATE TABLE \`${table_name}\``);
-    }
-  } finally {
-    await prisma.$executeRawUnsafe("SET FOREIGN_KEY_CHECKS = 1");
-  }
+  // FOREIGN_KEY_CHECKS is per-connection. Without pinning, the pool can hand
+  // TRUNCATE a different connection than the one SET ran on, which fails with
+  // error 1701 intermittently. An interactive transaction holds one connection.
+  await prisma.$transaction(
+    async (tx) => {
+      await tx.$executeRawUnsafe("SET FOREIGN_KEY_CHECKS = 0");
+      try {
+        for (const { table_name } of rows) {
+          await tx.$executeRawUnsafe(`TRUNCATE TABLE \`${table_name}\``);
+        }
+      } finally {
+        await tx.$executeRawUnsafe("SET FOREIGN_KEY_CHECKS = 1");
+      }
+    },
+    { timeout: 60_000 }
+  );
 }
