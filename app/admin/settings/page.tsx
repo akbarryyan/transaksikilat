@@ -121,9 +121,9 @@ export default function SettingsPage() {
   const [paymentGatewayQrisFeeValue, setPaymentGatewayQrisFeeValue] = useState("0");
   const [merchantPlatformFeeType, setMerchantPlatformFeeType] = useState<"FIXED" | "PERCENT">("FIXED");
   const [merchantPlatformFeeValue, setMerchantPlatformFeeValue] = useState("0");
-  const [showPoppayIntegratorToken, setShowPoppayIntegratorToken] = useState(false);
-  const [showPoppaySecretKey, setShowPoppaySecretKey] = useState(false);
-  const [showPoppayPassword, setShowPoppayPassword] = useState(false);
+  // Credentials are write-only: the server never sends their values back, only
+  // whether each is configured. These inputs stay empty unless being replaced.
+  const [poppaySecretsConfigured, setPoppaySecretsConfigured] = useState<Record<string, boolean>>({});
   const [digiflazzUsername, setDigiflazzUsername] = useState("");
   const [digiflazzApiKey, setDigiflazzApiKey] = useState("");
   const [digiflazzBaseUrl, setDigiflazzBaseUrl] = useState("https://api.digiflazz.com/v1");
@@ -163,16 +163,14 @@ export default function SettingsPage() {
         setSmtpUser(raw.SMTP_USER ?? "");
         setSmtpPass(raw.SMTP_PASS ?? "");
         setSmtpFrom(raw.SMTP_FROM ?? "");
+        setPoppaySecretsConfigured(data.data.secretsConfigured ?? {});
         setPoppayApiBaseUrl(raw.POPPAY_API_BASE_URL ?? envDefaults.POPPAY_API_BASE_URL ?? "");
         setPoppayUrl(raw.POPPAY_URL ?? envDefaults.POPPAY_URL ?? "");
         setPoppayPort(raw.POPPAY_PORT ?? envDefaults.POPPAY_PORT ?? "");
         setPoppayVersion(raw.POPPAY_VERSION ?? envDefaults.POPPAY_VERSION ?? "");
-        setPoppayIntegratorToken(raw.POPPAY_INTEGRATOR_TOKEN ?? envDefaults.POPPAY_INTEGRATOR_TOKEN ?? "");
         setPoppayAggregatorCode(raw.POPPAY_AGGREGATOR_CODE ?? envDefaults.POPPAY_AGGREGATOR_CODE ?? "");
-        setPoppaySecretKey(raw.POPPAY_SECRET_KEY ?? envDefaults.POPPAY_SECRET_KEY ?? "");
         setPoppayMerchantAccountNumber(raw.POPPAY_MERCHANT_ACCOUNT_NUMBER ?? envDefaults.POPPAY_MERCHANT_ACCOUNT_NUMBER ?? "");
         setPoppayEmail(raw.POPPAY_EMAIL ?? envDefaults.POPPAY_EMAIL ?? "");
-        setPoppayPassword(raw.POPPAY_PASSWORD ?? envDefaults.POPPAY_PASSWORD ?? "");
         setPaymentGatewayQrisFeeType(
           (raw.PAYMENT_GATEWAY_QRIS_FEE_TYPE ?? envDefaults.PAYMENT_GATEWAY_QRIS_FEE_TYPE ?? "FIXED") === "PERCENT"
             ? "PERCENT"
@@ -352,7 +350,10 @@ export default function SettingsPage() {
         { key: "SMTP_PASS", value: smtpPass },
         { key: "SMTP_FROM", value: smtpFrom },
       ];
+      const WRITE_ONLY = ["POPPAY_INTEGRATOR_TOKEN", "POPPAY_SECRET_KEY", "POPPAY_PASSWORD"];
       for (const { key, value } of pairs) {
+        // A blank credential field means "keep the current one".
+        if (WRITE_ONLY.includes(key) && value === "") continue;
         const res = await fetch("/api/admin/site-config", {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
@@ -467,6 +468,15 @@ export default function SettingsPage() {
           return;
         }
       }
+      setPoppaySecretsConfigured((prev) => ({
+        ...prev,
+        ...(poppayIntegratorToken ? { POPPAY_INTEGRATOR_TOKEN: true } : {}),
+        ...(poppaySecretKey ? { POPPAY_SECRET_KEY: true } : {}),
+        ...(poppayPassword ? { POPPAY_PASSWORD: true } : {}),
+      }));
+      setPoppayIntegratorToken("");
+      setPoppaySecretKey("");
+      setPoppayPassword("");
       toast.success("Konfigurasi Poppay berhasil disimpan");
     } catch {
       toast.error("Gagal menyimpan konfigurasi Poppay");
@@ -1310,20 +1320,13 @@ export default function SettingsPage() {
                 </label>
                 <div className="relative">
                   <input
-                    type={showPoppayIntegratorToken ? "text" : "password"}
+                    type="password"
+ autoComplete="new-password"
                     value={poppayIntegratorToken}
                     onChange={(e) => setPoppayIntegratorToken(e.target.value)}
-                    placeholder="Bearer token dari Poppay"
+                    placeholder={poppaySecretsConfigured.POPPAY_INTEGRATOR_TOKEN ? "•••••••• (tersimpan — isi untuk mengganti)" : "Bearer token dari Poppay"}
                     className="w-full px-3 py-2.5 pr-14 text-sm border border-slate-200 rounded-xl outline-none focus:border-blue-400 font-mono text-xs"
                   />
-                  <button
-                    type="button"
-                    onClick={() => setShowPoppayIntegratorToken((v) => !v)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-medium text-slate-400 hover:text-slate-600 transition"
-                    tabIndex={-1}
-                  >
-                    {showPoppayIntegratorToken ? "Hide" : "Show"}
-                  </button>
                 </div>
               </div>
 
@@ -1376,20 +1379,13 @@ export default function SettingsPage() {
                   </label>
                   <div className="relative">
                     <input
-                      type={showPoppayPassword ? "text" : "password"}
+                      type="password"
+ autoComplete="new-password"
                       value={poppayPassword}
                       onChange={(e) => setPoppayPassword(e.target.value)}
-                      placeholder="Password akun Poppay"
+                      placeholder={poppaySecretsConfigured.POPPAY_PASSWORD ? "•••••••• (tersimpan — isi untuk mengganti)" : "Password akun Poppay"}
                       className="w-full px-3 py-2.5 pr-14 text-sm border border-slate-200 rounded-xl outline-none focus:border-blue-400 font-mono text-xs"
                     />
-                    <button
-                      type="button"
-                      onClick={() => setShowPoppayPassword((v) => !v)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-medium text-slate-400 hover:text-slate-600 transition"
-                      tabIndex={-1}
-                    >
-                      {showPoppayPassword ? "Hide" : "Show"}
-                    </button>
                   </div>
                 </div>
               </div>
@@ -1400,20 +1396,13 @@ export default function SettingsPage() {
                 </label>
                 <div className="relative">
                   <input
-                    type={showPoppaySecretKey ? "text" : "password"}
+                    type="password"
+ autoComplete="new-password"
                     value={poppaySecretKey}
                     onChange={(e) => setPoppaySecretKey(e.target.value)}
-                    placeholder="Secret key untuk verifikasi callback/signature"
+                    placeholder={poppaySecretsConfigured.POPPAY_SECRET_KEY ? "•••••••• (tersimpan — isi untuk mengganti)" : "Secret key untuk verifikasi callback/signature"}
                     className="w-full px-3 py-2.5 pr-14 text-sm border border-slate-200 rounded-xl outline-none focus:border-blue-400 font-mono text-xs"
                   />
-                  <button
-                    type="button"
-                    onClick={() => setShowPoppaySecretKey((v) => !v)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-medium text-slate-400 hover:text-slate-600 transition"
-                    tabIndex={-1}
-                  >
-                    {showPoppaySecretKey ? "Hide" : "Show"}
-                  </button>
                 </div>
               </div>
 
@@ -1505,7 +1494,7 @@ export default function SettingsPage() {
 
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pt-2 border-t border-slate-100">
                 <div>
-                  {poppayIntegratorToken && poppayAggregatorCode && poppayMerchantAccountNumber && poppayEmail && poppayPassword ? (
+                  {poppaySecretsConfigured.POPPAY_INTEGRATOR_TOKEN && poppayAggregatorCode && poppayMerchantAccountNumber && poppayEmail && poppaySecretsConfigured.POPPAY_PASSWORD ? (
                     <div className="flex items-center gap-1.5">
                       <span className="w-2 h-2 rounded-full bg-green-400 flex-shrink-0" />
                       <span className="text-[10px] text-green-600 font-medium">Poppay sudah dikonfigurasi di database</span>
